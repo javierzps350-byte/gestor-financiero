@@ -13,3 +13,12 @@ models/*
 !models/README.md
 data/*
 !data/.gitkeep
+# Datos personales y archivos generados
+backups/*
+!backups/.keep
+evidence/*
+!evidence/.keep
+*.log
+*.sqlite3-wal
+*.sqlite3-shm
+*.token
