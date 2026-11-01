@@ -4,7 +4,9 @@ from tkinter import filedialog, messagebox, ttk
 from datetime import date
 
 from src.domain.money import to_cents
-from src.services.finance_service import create_client, create_movement, list_clients, set_client_rate
+from src.services.finance_service import (
+    create_client, create_movement, find_voucher_matches, list_clients, set_client_rate,
+)
 from src.services.evidence_service import attach_evidence, find_recent_downloads
 
 
@@ -276,6 +278,24 @@ class MovementDialog(BaseDialog):
             counterparty = self.vars["counterparty"].get().strip()
             if not counterparty and client_id:
                 counterparty = self.client_map[self.vars["client"].get()]["name"]
+
+            voucher = self.vars["voucher"].get().strip()
+            duplicates = find_voucher_matches(voucher)
+            if duplicates:
+                examples = "\n".join(
+                    f"• #{row['id']} · {row['payment_date']} · {row['counterparty']} · ${row['amount_cents'] / 100:.2f}"
+                    for row in duplicates[:5]
+                )
+                extra = "\n… y más coincidencias." if len(duplicates) > 5 else ""
+                proceed = messagebox.askyesno(
+                    "Voucher posiblemente duplicado",
+                    f"Ya existe uno o más movimientos con el voucher {voucher}:\n\n"
+                    f"{examples}{extra}\n\n¿Deseas registrar este movimiento de todas formas?",
+                    parent=self,
+                )
+                if not proceed:
+                    return
+
             movement_id = create_movement(
                 direction=self.direction,
                 counterparty=counterparty,

@@ -13,8 +13,9 @@ from src.config import APP_NAME, APP_VERSION, BACKUP_DIR, DB_PATH, EVIDENCE_DIR
 from src.database.connection import connect
 from src.domain.money import format_money
 from src.services.finance_service import (
-    client_debt_summary, dashboard_summary, list_client_charges, list_clients,
-    search_movements, set_client_active, void_movement,
+    client_debt_summary, client_payment_history, dashboard_summary,
+    list_client_charges, list_clients, search_movements, set_client_active,
+    void_movement,
 )
 from src.services.evidence_service import evidence_absolute_path
 from src.services.report_service import export_debts_csv, export_movements_csv
@@ -448,6 +449,7 @@ class DebtView(ttk.Frame):
         top.pack(fill="x")
         ttk.Label(top, text="Mensualidades y deudas", style="Title.TLabel").pack(side="left")
         ttk.Button(top, text="Exportar estado de cuentas", command=self.export).pack(side="right")
+        ttk.Button(top, text="Historial de pagos", command=self.open_payment_history).pack(side="right", padx=(0, 8))
         selectors = ttk.Frame(self)
         selectors.pack(fill="x", pady=(14, 12))
         ttk.Label(selectors, text="Cliente").pack(side="left")
@@ -531,6 +533,74 @@ class DebtView(ttk.Frame):
                 ), tags=(tag,) if tag else ())
         except Exception as exc:
             messagebox.showerror("Error al consultar mensualidades", str(exc), parent=self)
+
+    def open_payment_history(self):
+        key = self.client_var.get()
+        client = self.client_map.get(key)
+        if not client:
+            messagebox.showwarning("Selecciona un cliente", "Selecciona un cliente para consultar su historial de pagos.", parent=self)
+            return
+
+        client_id = int(client["id"])
+        rows = client_payment_history(client_id)
+        dialog = tk.Toplevel(self)
+        dialog.title(f"Historial de pagos · {client['name']}")
+        dialog.geometry("1120x520")
+        dialog.minsize(900, 420)
+        dialog.configure(bg=BG)
+        dialog.transient(self)
+        frame = ttk.Frame(dialog, padding=18)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(frame, text=f"Historial de pagos · {client['name']}", style="DialogTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            frame,
+            text="El importe recibido se muestra por separado del valor aplicado a mensualidades.",
+            style="Hint.TLabel",
+        ).pack(anchor="w", pady=(4, 12))
+
+        columns = ("date", "registered", "amount", "applied", "unapplied", "method", "voucher", "evidence", "status", "reason")
+        tree = ttk.Treeview(frame, columns=columns, show="headings", selectmode="browse")
+        definitions = [
+            ("date", "Fecha pago", 95), ("registered", "Registrado", 135),
+            ("amount", "Recibido", 100), ("applied", "Aplicado a cuotas", 120),
+            ("unapplied", "No aplicado", 105), ("method", "Método", 105),
+            ("voucher", "Voucher", 105), ("evidence", "Archivos", 65),
+            ("status", "Estado", 80), ("reason", "Motivo", 190),
+        ]
+        for key_name, label, width in definitions:
+            tree.heading(key_name, text=label)
+            tree.column(key_name, width=width, minwidth=65, anchor="w" if key_name == "reason" else "center")
+        tree.pack(fill="both", expand=True)
+        tree.tag_configure("void", foreground="#8995A7")
+
+        total_received = 0
+        total_applied = 0
+        for row in rows:
+            is_void = row["status"] == "void"
+            received = int(row["amount_cents"])
+            applied = int(row["allocated_cents"]) if not is_void else 0
+            total_received += received if not is_void else 0
+            total_applied += applied
+            tree.insert(
+                "", "end", iid=str(row["id"]),
+                values=(
+                    row["payment_date"], row["registered_at"], format_money(received),
+                    format_money(applied), format_money(max(0, received - applied)),
+                    row["payment_method"], row["voucher_number"] or "—",
+                    row["evidence_count"], "Anulado" if is_void else "Vigente", row["reason"],
+                ),
+                tags=("void",) if is_void else (),
+            )
+
+        footer = ttk.Frame(frame)
+        footer.pack(fill="x", pady=(12, 0))
+        ttk.Label(
+            footer,
+            text=f"Total recibido vigente: {format_money(total_received)}    ·    Aplicado a mensualidades: {format_money(total_applied)}",
+            style="SubTitle.TLabel",
+        ).pack(side="left")
+        ttk.Button(footer, text="Cerrar", command=dialog.destroy).pack(side="right")
 
     def export(self):
         path = filedialog.asksaveasfilename(parent=self, title="Exportar estados de cuenta", defaultextension=".csv", initialfile="estados_de_cuenta.csv", filetypes=[("CSV compatible con Excel", "*.csv")])

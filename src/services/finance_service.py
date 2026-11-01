@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Any
 
 from src.database.connection import get_connection
@@ -120,7 +120,7 @@ def _insert_charge(connection, client_id: int, cycle_start: date, billing_day: i
             f"No hay una tarifa configurada para el ciclo {cycle_start.isoformat()}."
         )
     end = cycle_end(cycle_start, billing_day)
-    cursor = connection.execute(
+    connection.execute(
         """INSERT OR IGNORE INTO monthly_charges
            (client_id, rate_id, period_start, period_end, due_date, amount_due_cents)
            VALUES (?, ?, ?, ?, ?, ?)""",
@@ -133,12 +133,14 @@ def _insert_charge(connection, client_id: int, cycle_start: date, billing_day: i
             int(rate["monthly_amount_cents"]),
         ),
     )
-    if cursor.lastrowid:
-        return int(cursor.lastrowid)
+    # INSERT OR IGNORE puede conservar el lastrowid de otra inserción anterior.
+    # Siempre consultamos por la clave natural para recuperar el ID correcto.
     row = connection.execute(
         "SELECT id FROM monthly_charges WHERE client_id=? AND period_start=?",
         (client_id, cycle_start.isoformat()),
     ).fetchone()
+    if not row:
+        raise RuntimeError("No se pudo crear ni recuperar la mensualidad.")
     return int(row["id"])
 
 
@@ -223,6 +225,38 @@ def _allocate_payment(connection, movement_id: int, client_id: int, amount_cents
     return allocated_total
 
 
+def _rebuild_client_allocations(connection, client_id: int) -> None:
+    """Rebuild monthly allocations in payment-date order.
+
+    This keeps the oldest outstanding monthly charges covered first even when
+    a payment is entered late or an older payment is voided afterwards.
+    """
+    connection.execute(
+        """DELETE FROM payment_allocations
+           WHERE movement_id IN (
+               SELECT id FROM movements
+               WHERE client_id=? AND direction='income' AND apply_to_monthly=1
+           )""",
+        (client_id,),
+    )
+    payments = connection.execute(
+        """SELECT id, amount_cents, payment_date
+           FROM movements
+           WHERE client_id=? AND direction='income'
+             AND apply_to_monthly=1 AND status='active'
+           ORDER BY payment_date ASC, registered_at ASC, id ASC""",
+        (client_id,),
+    ).fetchall()
+    for payment in payments:
+        _allocate_payment(
+            connection,
+            int(payment["id"]),
+            client_id,
+            int(payment["amount_cents"]),
+            payment["payment_date"],
+        )
+
+
 def create_movement(
     direction: str,
     counterparty: str,
@@ -263,7 +297,7 @@ def create_movement(
         )
         movement_id = int(cursor.lastrowid)
         if apply_to_monthly:
-            _allocate_payment(connection, movement_id, int(client_id), amount_cents, payment_date)
+            _rebuild_client_allocations(connection, int(client_id))
         connection.execute(
             "INSERT INTO audit_log(entity_type, entity_id, action, details) VALUES ('movement', ?, 'created', ?)",
             (movement_id, f"{direction}: {amount_cents} centavos; {reason.strip()}"),
@@ -275,7 +309,10 @@ def void_movement(movement_id: int, reason: str) -> None:
     if not reason.strip():
         raise ValueError("Debes indicar por qué se anula el movimiento.")
     with get_connection() as connection:
-        movement = connection.execute("SELECT status FROM movements WHERE id=?", (movement_id,)).fetchone()
+        movement = connection.execute(
+            "SELECT status, client_id, direction, apply_to_monthly FROM movements WHERE id=?",
+            (movement_id,),
+        ).fetchone()
         if not movement:
             raise ValueError("No se encontró el movimiento.")
         if movement["status"] == "void":
@@ -284,6 +321,12 @@ def void_movement(movement_id: int, reason: str) -> None:
             "UPDATE movements SET status='void', void_reason=?, voided_at=datetime('now','localtime') WHERE id=?",
             (reason.strip(), movement_id),
         )
+        if (
+            movement["direction"] == "income"
+            and movement["client_id"] is not None
+            and int(movement["apply_to_monthly"] or 0) == 1
+        ):
+            _rebuild_client_allocations(connection, int(movement["client_id"]))
         connection.execute(
             "INSERT INTO audit_log(entity_type, entity_id, action, details) VALUES ('movement', ?, 'voided', ?)",
             (movement_id, reason.strip()),
@@ -344,17 +387,39 @@ def list_evidence(movement_id: int) -> list[dict[str, Any]]:
 
 
 def list_client_charges(client_id: int, through_date: str | None = None) -> list[dict[str, Any]]:
+    """Return charges and the balance as it stood on the requested date.
+
+    Future periods are shown only when a payment made on/before the reference
+    date has already created or funded them. Payments dated after the reference
+    date never reduce a historical balance.
+    """
     target = parse_iso_date(through_date) if through_date else date.today()
+    target_text = target.isoformat()
     with get_connection() as connection:
         _ensure_charges_until(connection, client_id, target)
         rows = connection.execute(
             """SELECT ch.*,
                COALESCE((SELECT SUM(pa.amount_allocated_cents)
-                         FROM payment_allocations pa JOIN movements m ON m.id=pa.movement_id
-                         WHERE pa.charge_id=ch.id AND m.status='active'),0) AS applied_cents
-               FROM monthly_charges ch WHERE ch.client_id=?
+                         FROM payment_allocations pa
+                         JOIN movements m ON m.id=pa.movement_id
+                         WHERE pa.charge_id=ch.id
+                           AND m.status='active'
+                           AND m.payment_date<=?),0) AS applied_cents
+               FROM monthly_charges ch
+               WHERE ch.client_id=?
+                 AND (
+                     ch.period_start<=?
+                     OR EXISTS (
+                         SELECT 1
+                         FROM payment_allocations pa2
+                         JOIN movements m2 ON m2.id=pa2.movement_id
+                         WHERE pa2.charge_id=ch.id
+                           AND m2.status='active'
+                           AND m2.payment_date<=?
+                     )
+                 )
                ORDER BY ch.period_start""",
-            (client_id,),
+            (target_text, client_id, target_text, target_text),
         ).fetchall()
         result = []
         for row in rows:
@@ -362,6 +427,44 @@ def list_client_charges(client_id: int, through_date: str | None = None) -> list
             item["remaining_cents"] = max(0, int(item["amount_due_cents"]) - int(item["applied_cents"]))
             result.append(item)
         return result
+
+
+def client_payment_history(client_id: int, as_of: str | None = None) -> list[dict[str, Any]]:
+    """List client income movements with original and monthly-applied amounts."""
+    params: list[Any] = [client_id]
+    date_clause = ""
+    if as_of:
+        reference = parse_iso_date(as_of).isoformat()
+        date_clause = " AND m.payment_date<=?"
+        params.append(reference)
+    with get_connection() as connection:
+        rows = connection.execute(
+            """SELECT m.*,
+               COALESCE((SELECT SUM(pa.amount_allocated_cents)
+                         FROM payment_allocations pa
+                         WHERE pa.movement_id=m.id),0) AS allocated_cents,
+               (SELECT COUNT(*) FROM evidence_files e WHERE e.movement_id=m.id) AS evidence_count
+               FROM movements m
+               WHERE m.client_id=? AND m.direction='income'""" + date_clause +
+            " ORDER BY m.payment_date DESC, m.id DESC",
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def find_voucher_matches(voucher_number: str, exclude_movement_id: int | None = None) -> list[dict[str, Any]]:
+    """Find existing movements with the same voucher, case-insensitively."""
+    voucher = voucher_number.strip()
+    if not voucher:
+        return []
+    sql = _movement_select() + " WHERE lower(trim(m.voucher_number))=lower(trim(?))"
+    params: list[Any] = [voucher]
+    if exclude_movement_id is not None:
+        sql += " AND m.id<>?"
+        params.append(exclude_movement_id)
+    sql += " ORDER BY m.payment_date DESC, m.id DESC LIMIT 20"
+    with get_connection() as connection:
+        return [dict(row) for row in connection.execute(sql, params).fetchall()]
 
 
 def client_debt_summary(client_id: int, as_of: str | None = None) -> dict[str, int]:
@@ -382,8 +485,11 @@ def client_debt_summary(client_id: int, as_of: str | None = None) -> dict[str, i
     )
     with get_connection() as connection:
         received = int(connection.execute(
-            "SELECT COALESCE(SUM(amount_cents),0) FROM movements WHERE client_id=? AND direction='income' AND status='active'",
-            (client_id,),
+            """SELECT COALESCE(SUM(amount_cents),0)
+               FROM movements
+               WHERE client_id=? AND direction='income'
+                 AND status='active' AND payment_date<=?""",
+            (client_id, reference.isoformat()),
         ).fetchone()[0])
     return {
         "total_billed_cents": total_billed,

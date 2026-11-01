@@ -1,6 +1,6 @@
 # Gestor Financiero
 
-**Versión 0.1.1** — incluye actualización automática y segura de bases de datos anteriores.
+**Versión 0.1.2** — refina la distribución cronológica de pagos, consultas históricas y trazabilidad de los clientes.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
@@ -20,10 +20,14 @@ Aplicación de escritorio local para Windows, construida con Python, Tkinter y S
 - Exportación CSV compatible con Excel.
 - Copias de seguridad de la base SQLite.
 - Anulación controlada de movimientos, conservando el registro de auditoría.
+- Recalcula las mensualidades cuando se registra un pago atrasado o se anula uno anterior, respetando la fecha real de cada pago.
+- Consultas históricas que excluyen pagos cuya fecha sea posterior a la fecha consultada.
+- Historial de pagos por cliente, separando importe recibido, importe aplicado a cuotas y parte no aplicada.
+- Advertencia ante números de voucher repetidos; permite continuar cuando la repetición es legítima.
 - Asistente ligero para consultas escritas; voz local opcional.
 - Puente opcional con NEXUS, aislado y desactivado por defecto.
 
-## Actualizar desde 0.1.0 sin perder datos
+## Actualizar desde versiones anteriores sin perder datos
 
 1. Cierra el programa.
 2. Descomprime la versión nueva en la carpeta del proyecto, reemplazando los archivos del programa, pero no elimines la carpeta `data/`.
@@ -65,6 +69,14 @@ El resultado estará en `dist/GestorFinanciero/`. Para generar el instalador Set
 
 La versión empaquetada guarda los datos de usuario en `%LOCALAPPDATA%\GestorFinanciero`, fuera de los archivos de la aplicación, para conservarlos al actualizar.
 
+## Novedades de 0.1.2
+
+- Si se registra hoy un pago cuya fecha real fue anterior a otros pagos, la distribución de mensualidades se reconstruye por fecha de pago, luego fecha de registro e ID.
+- Si se anula un pago que había cubierto cuotas antiguas, los pagos activos posteriores se vuelven a distribuir desde la cuota pendiente más antigua.
+- Al consultar una fecha pasada, no se cuentan pagos cuya fecha de pago sea posterior a esa fecha.
+- En Mensualidades se puede abrir el historial de pagos del cliente y comparar el importe original con lo aplicado a cuotas.
+- Antes de guardar un voucher que ya existe, se muestra una advertencia con los movimientos coincidentes.
+
 ## Lógica de mensualidades
 
 - El ciclo inicial comienza en la fecha de primer cobro registrada para el cliente.
@@ -72,6 +84,7 @@ La versión empaquetada guarda los datos de usuario en `%LOCALAPPDATA%\GestorFin
 - Los ingresos solo afectan las mensualidades cuando se marca expresamente `Aplicar este ingreso a las mensualidades`.
 - La distribución cubre primero los períodos abiertos más antiguos. Si sobra dinero, se generan períodos futuros y se asigna el saldo como abono.
 - El importe original del movimiento nunca se cambia: se conserva el pago recibido y la distribución se almacena en otra tabla.
+- La distribución se ordena por fecha real del pago. Registrar pagos fuera de orden o anular un pago provoca una reconstrucción para mantener cubiertas primero las cuotas más antiguas.
 - Cambiar una tarifa no reescribe períodos que ya tengan abonos. Las cuotas futuras sin abonos pueden actualizarse a la nueva tarifa.
 - Para anular un movimiento se exige un motivo. Sus distribuciones dejan de contar para los saldos.
 
@@ -119,7 +132,7 @@ Endpoints disponibles:
 ## Limitaciones de esta primera versión
 
 - La interfaz está en una primera versión funcional y no incluye todavía edición directa de movimientos; se puede anular con motivo y registrar el movimiento corregido.
-- No hay OCR automático de comprobantes ni lectura automática de transferencias de Descargas.
+- No hay OCR automático de comprobantes ni lectura automática del contenido de transferencias de Descargas.
 - El asistente de voz solo consulta; no crea registros por dictado.
 - La conexión remota desde iPhone y el gestor inteligente de hardware se desarrollarán después de medir el consumo real.
 - Los CSV se abren con Excel; la exportación XLSX/PDF se incorporará como módulo opcional.
