@@ -33,11 +33,40 @@ RED = "#F07178"
 
 
 class MainWindow:
+    """Main application shell with lightweight animated page navigation."""
+
+    NAV_ITEMS = [
+        ("dashboard", "⌂", "Inicio"),
+        ("incomes", "↗", "Ingresos"),
+        ("expenses", "↙", "Gastos"),
+        ("clients", "♙", "Clientes"),
+        ("debts", "◷", "Mensualidades"),
+        ("search", "⌕", "Buscador"),
+        ("assistant", "✦", "Asistente"),
+    ]
+
+    PAGE_META = {
+        "dashboard": ("Resumen general", "Tu actividad financiera en un solo lugar."),
+        "incomes": ("Ingresos", "Pagos recibidos, comprobantes y movimientos."),
+        "expenses": ("Gastos", "Pagos realizados y control de salidas."),
+        "clients": ("Clientes", "Tarifas, datos y seguimiento de cada cliente."),
+        "debts": ("Mensualidades", "Cuotas, abonos y saldos pendientes."),
+        "search": ("Buscador", "Encuentra movimientos por persona, fecha o voucher."),
+        "assistant": ("Asistente", "Consultas rápidas mediante texto o voz opcional."),
+    }
+
     def __init__(self, root: tk.Tk):
         self.root = root
+        self.current_page = None
+        self._transition_token = 0
+        self._nav_widgets = {}
         root.title(f"{APP_NAME} · {APP_VERSION}")
-        root.geometry("1220x790")
-        root.minsize(980, 650)
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        window_width = min(1280, max(980, screen_width - 60))
+        window_height = min(820, max(660, screen_height - 80))
+        root.geometry(f"{window_width}x{window_height}+30+25")
+        root.minsize(min(980, window_width), min(660, window_height))
         root.configure(bg=BG)
         self._configure_style()
         self._build_shell()
@@ -58,44 +87,178 @@ class MainWindow:
         style.map("TButton", background=[("active", "#2A3D59"), ("disabled", "#202A38")], foreground=[("disabled", "#65758A")])
         style.configure("Accent.TButton", background=ACCENT, foreground="#071522", font=("Segoe UI", 9, "bold"))
         style.map("Accent.TButton", background=[("active", "#67C3F2")])
-        style.configure("TEntry", fieldbackground=PANEL, foreground=TEXT, insertcolor=TEXT, bordercolor="#2B3C55", padding=7)
-        style.configure("TCombobox", fieldbackground=PANEL, background=PANEL, foreground=TEXT, arrowcolor=TEXT, padding=6)
+        style.configure("TEntry", fieldbackground=PANEL, foreground=TEXT, insertcolor=TEXT, bordercolor="#2B3C55", padding=8)
+        style.configure("TCombobox", fieldbackground=PANEL, background=PANEL, foreground=TEXT, arrowcolor=TEXT, padding=7)
         style.map("TCombobox", fieldbackground=[("readonly", PANEL)], foreground=[("readonly", TEXT)])
         style.configure("TCheckbutton", background=BG, foreground=TEXT)
-        style.configure("TNotebook", background=BG, borderwidth=0, tabmargins=(0, 5, 0, 0))
-        style.configure("TNotebook.Tab", background=PANEL, foreground=MUTED, padding=(16, 10), font=("Segoe UI", 9, "bold"))
-        style.map("TNotebook.Tab", background=[("selected", PANEL_ALT)], foreground=[("selected", TEXT)])
-        style.configure("Treeview", background=PANEL, fieldbackground=PANEL, foreground=TEXT, rowheight=30, borderwidth=0, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background=PANEL_ALT, foreground=TEXT, relief="flat", font=("Segoe UI", 9, "bold"), padding=8)
+        style.configure("Treeview", background=PANEL, fieldbackground=PANEL, foreground=TEXT, rowheight=34, borderwidth=0, font=("Segoe UI", 9))
+        style.configure("Treeview.Heading", background=PANEL_ALT, foreground=TEXT, relief="flat", font=("Segoe UI", 9, "bold"), padding=10)
         style.map("Treeview", background=[("selected", "#244B70")], foreground=[("selected", "#FFFFFF")])
         style.configure("TScrollbar", background=PANEL, troughcolor=BG, bordercolor=BG, arrowcolor=MUTED)
 
     def _build_shell(self):
-        header = tk.Frame(self.root, bg=BG, padx=26, pady=18)
-        header.pack(fill="x")
-        tk.Label(header, text="GESTOR FINANCIERO", bg=BG, fg=TEXT, font=("Segoe UI", 20, "bold")).pack(side="left")
-        tk.Label(header, text="CONTROL LOCAL DE INGRESOS · GASTOS · MENSUALIDADES", bg=BG, fg=MUTED, font=("Segoe UI", 8, "bold")).pack(side="left", padx=(16, 0), pady=(7, 0))
-        tk.Label(header, text=f"v{APP_VERSION}", bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(side="right", pady=(7, 0))
+        # Compact application header.
+        top = tk.Frame(self.root, bg="#101B2C", height=76, padx=24)
+        top.pack(fill="x")
+        top.pack_propagate(False)
 
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill="both", expand=True, padx=20, pady=(0, 14))
+        mark = tk.Frame(top, bg=ACCENT, width=42, height=42)
+        mark.pack(side="left", pady=16)
+        mark.pack_propagate(False)
+        tk.Label(mark, text="GF", bg=ACCENT, fg="#071522", font=("Segoe UI", 14, "bold")).pack(expand=True)
 
-        self.dashboard = DashboardView(self.notebook, self.refresh_all)
-        self.incomes = MovementView(self.notebook, "income", "Ingresos")
-        self.expenses = MovementView(self.notebook, "expense", "Gastos")
-        self.clients = ClientView(self.notebook, self.refresh_all)
-        self.debts = DebtView(self.notebook)
-        self.search = MovementView(self.notebook, "all", "Buscador")
-        self.assistant = AssistantView(self.notebook)
+        brand = tk.Frame(top, bg="#101B2C")
+        brand.pack(side="left", padx=(12, 0), pady=14)
+        tk.Label(brand, text="GESTOR FINANCIERO", bg="#101B2C", fg=TEXT, font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        tk.Label(brand, text="CONTROL LOCAL · INGRESOS · GASTOS · MENSUALIDADES", bg="#101B2C", fg=MUTED, font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(2, 0))
 
-        self.notebook.add(self.dashboard, text="  Inicio  ")
-        self.notebook.add(self.incomes, text="  Ingresos  ")
-        self.notebook.add(self.expenses, text="  Gastos  ")
-        self.notebook.add(self.clients, text="  Clientes  ")
-        self.notebook.add(self.debts, text="  Mensualidades  ")
-        self.notebook.add(self.search, text="  Buscador  ")
-        self.notebook.add(self.assistant, text="  Asistente  ")
+        right = tk.Frame(top, bg="#101B2C")
+        right.pack(side="right", pady=19)
+        local_pill = tk.Frame(right, bg="#18372F", padx=10, pady=6)
+        local_pill.pack(side="left", padx=(0, 12))
+        tk.Label(local_pill, text="●  LOCAL Y PRIVADO", bg="#18372F", fg="#72D9B3", font=("Segoe UI", 8, "bold")).pack()
+        tk.Label(right, text=f"v{APP_VERSION}", bg="#101B2C", fg=MUTED, font=("Segoe UI", 9)).pack(side="left")
+
+        shell = tk.Frame(self.root, bg=BG)
+        shell.pack(fill="both", expand=True)
+
+        # Left navigation rail.
+        self.sidebar = tk.Frame(shell, bg="#111D2E", width=218, padx=10, pady=18)
+        self.sidebar.pack(side="left", fill="y")
+        self.sidebar.pack_propagate(False)
+        tk.Label(self.sidebar, text="ESPACIO DE TRABAJO", bg="#111D2E", fg="#71849F", font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=13, pady=(5, 12))
+
+        for page_id, symbol, label in self.NAV_ITEMS:
+            self._make_nav_button(page_id, symbol, label)
+
+        spacer = tk.Frame(self.sidebar, bg="#111D2E")
+        spacer.pack(fill="both", expand=True)
+        divider = tk.Frame(self.sidebar, bg="#26364D", height=1)
+        divider.pack(fill="x", padx=10, pady=(8, 12))
+        tk.Label(self.sidebar, text="●  DATOS EN ESTE EQUIPO", bg="#111D2E", fg="#70C9A8", font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=13)
+        tk.Label(self.sidebar, text="No requiere conexión\na Internet para operar.", bg="#111D2E", fg=MUTED, font=("Segoe UI", 8), justify="left").pack(anchor="w", padx=13, pady=(6, 4))
+
+        # Main work area and slim page toolbar.
+        work = tk.Frame(shell, bg=BG)
+        work.pack(side="left", fill="both", expand=True)
+        self.page_toolbar = tk.Frame(work, bg=BG, padx=24, pady=13, height=48)
+        self.page_toolbar.pack(fill="x")
+        self.page_toolbar.pack_propagate(False)
+        self.breadcrumb = tk.Label(self.page_toolbar, text="INICIO  /  RESUMEN", bg=BG, fg="#8293AA", font=("Segoe UI", 8, "bold"))
+        self.breadcrumb.pack(side="left", anchor="center")
+        self.page_hint = tk.Label(self.page_toolbar, text="", bg=BG, fg=MUTED, font=("Segoe UI", 8))
+        self.page_hint.pack(side="right", anchor="center")
+
+        self.page_host = tk.Frame(work, bg=BG)
+        self.page_host.pack(fill="both", expand=True, padx=(8, 18), pady=(0, 14))
+
+        self.dashboard = DashboardView(self.page_host, self.refresh_all)
+        self.incomes = MovementView(self.page_host, "income", "Ingresos")
+        self.expenses = MovementView(self.page_host, "expense", "Gastos")
+        self.clients = ClientView(self.page_host, self.refresh_all)
+        self.debts = DebtView(self.page_host)
+        self.search = MovementView(self.page_host, "all", "Buscador")
+        self.assistant = AssistantView(self.page_host)
+        self.pages = {
+            "dashboard": self.dashboard,
+            "incomes": self.incomes,
+            "expenses": self.expenses,
+            "clients": self.clients,
+            "debts": self.debts,
+            "search": self.search,
+            "assistant": self.assistant,
+        }
+
+        self.root.bind("<Control-1>", lambda _e: self.show_page("dashboard"))
+        self.root.bind("<Control-2>", lambda _e: self.show_page("incomes"))
+        self.root.bind("<Control-3>", lambda _e: self.show_page("expenses"))
+        self.root.bind("<Control-4>", lambda _e: self.show_page("clients"))
+        self.root.bind("<Control-5>", lambda _e: self.show_page("debts"))
+        self.root.bind("<Control-6>", lambda _e: self.show_page("search"))
+        self.root.bind("<Control-7>", lambda _e: self.show_page("assistant"))
+
+        self.show_page("dashboard", animate=False)
         self.refresh_all()
+
+    def _make_nav_button(self, page_id, symbol, label):
+        row = tk.Frame(self.sidebar, bg="#111D2E", height=44)
+        row.pack(fill="x", padx=3, pady=3)
+        row.pack_propagate(False)
+        indicator = tk.Frame(row, bg="#111D2E", width=3)
+        indicator.pack(side="left", fill="y")
+        button = tk.Button(
+            row, text=f"{symbol}    {label}", anchor="w",
+            bg="#111D2E", fg="#A8B6C9", activebackground="#203550",
+            activeforeground=TEXT, relief="flat", bd=0,
+            highlightthickness=0, font=("Segoe UI", 10),
+            padx=13, pady=9, cursor="hand2",
+            command=lambda key=page_id: self.show_page(key),
+        )
+        button.pack(side="left", fill="both", expand=True)
+        button.bind("<Enter>", lambda _e, key=page_id: self._nav_hover(key, True))
+        button.bind("<Leave>", lambda _e, key=page_id: self._nav_hover(key, False))
+        self._nav_widgets[page_id] = (row, indicator, button)
+
+    def _nav_hover(self, page_id, hovered):
+        if page_id == self.current_page:
+            return
+        row, _indicator, button = self._nav_widgets[page_id]
+        color = "#192A40" if hovered else "#111D2E"
+        row.configure(bg=color)
+        button.configure(bg=color)
+
+    def _set_nav_active(self, page_id):
+        for key, (row, indicator, button) in self._nav_widgets.items():
+            active = key == page_id
+            bg = "#203550" if active else "#111D2E"
+            row.configure(bg=bg)
+            indicator.configure(bg=ACCENT if active else "#111D2E")
+            button.configure(
+                bg=bg,
+                fg="#FFFFFF" if active else "#A8B6C9",
+                font=("Segoe UI", 10, "bold" if active else "normal"),
+            )
+
+    def show_page(self, page_id, animate=True):
+        if page_id not in self.pages:
+            return
+        if page_id == self.current_page:
+            return
+        self._transition_token += 1
+        token = self._transition_token
+        old_page = self.pages.get(self.current_page) if self.current_page else None
+        new_page = self.pages[page_id]
+        self.current_page = page_id
+        self._set_nav_active(page_id)
+        title, hint = self.PAGE_META[page_id]
+        self.breadcrumb.configure(text=f"GESTOR FINANCIERO  /  {title.upper()}")
+        self.page_hint.configure(text=hint)
+
+        if old_page is not None:
+            old_page.place_forget()
+        if not animate:
+            new_page.place(x=0, y=0, relwidth=1, relheight=1)
+            return
+
+        # Subtle horizontal entrance; no image filters, GPU, or external animation library.
+        start_x = 24
+        new_page.place(x=start_x, y=0, relwidth=1, relheight=1)
+        frames = 8
+        duration_ms = 18
+
+        def animate_step(step=0):
+            if token != self._transition_token or not new_page.winfo_exists():
+                return
+            progress = min(1.0, (step + 1) / frames)
+            eased = 1 - (1 - progress) ** 3
+            offset = int(start_x * (1 - eased))
+            new_page.place_configure(x=offset)
+            if step + 1 < frames:
+                self.root.after(duration_ms, lambda: animate_step(step + 1))
+            else:
+                new_page.place_configure(x=0)
+
+        animate_step()
 
     def refresh_all(self):
         self.dashboard.refresh()
@@ -108,39 +271,87 @@ class MainWindow:
 
 class DashboardView(ttk.Frame):
     def __init__(self, parent, refresh_callback):
-        super().__init__(parent, padding=22)
+        super().__init__(parent, padding=20)
         self.refresh_callback = refresh_callback
-        ttk.Label(self, text="Resumen general", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(self, text="Vista rápida de tus movimientos y cuentas pendientes.", style="SubTitle.TLabel").pack(anchor="w", pady=(3, 18))
-        self.cards = ttk.Frame(self)
+        self._shown_values = {key: 0 for key in ("income", "expenses", "net", "overdue")}
+        self._animation_ids = {}
+
+        heading = tk.Frame(self, bg=BG)
+        heading.pack(fill="x", pady=(0, 18))
+        title_box = tk.Frame(heading, bg=BG)
+        title_box.pack(side="left")
+        tk.Label(title_box, text="Resumen general", bg=BG, fg=TEXT, font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        tk.Label(title_box, text="Una vista clara de tus ingresos, gastos y cuentas pendientes.", bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 0))
+        live = tk.Frame(heading, bg="#18372F", padx=11, pady=7)
+        live.pack(side="right", anchor="center", pady=(4, 0))
+        tk.Label(live, text="●  RESUMEN ACTUALIZADO", bg="#18372F", fg="#72D9B3", font=("Segoe UI", 8, "bold")).pack()
+
+        self.cards = tk.Frame(self, bg=BG)
         self.cards.pack(fill="x")
         self.card_values = {}
-        for key, title in [
-            ("income", "INGRESOS DEL MES"), ("expenses", "GASTOS DEL MES"),
-            ("net", "BALANCE DEL MES"), ("overdue", "DEUDA VENCIDA"),
-        ]:
-            card = tk.Frame(self.cards, bg=PANEL, padx=18, pady=16, highlightthickness=1, highlightbackground="#24344C")
-            card.pack(side="left", fill="both", expand=True, padx=(0, 10))
-            tk.Label(card, text=title, bg=PANEL, fg=MUTED, font=("Segoe UI", 8, "bold")).pack(anchor="w")
-            value = tk.Label(card, text="$0,00", bg=PANEL, fg=TEXT, font=("Segoe UI", 19, "bold"))
-            value.pack(anchor="w", pady=(10, 0))
+        card_specs = [
+            ("income", "INGRESOS DEL MES", "↗", GREEN, "Dinero recibido"),
+            ("expenses", "GASTOS DEL MES", "↙", RED, "Dinero pagado"),
+            ("net", "BALANCE DEL MES", "＝", ACCENT, "Ingresos menos gastos"),
+            ("overdue", "DEUDA VENCIDA", "◷", "#E8B86D", "Cuotas fuera de fecha"),
+        ]
+        for index, (key, label, symbol, color, caption) in enumerate(card_specs):
+            card = tk.Frame(self.cards, bg=PANEL, padx=16, pady=14, highlightthickness=1, highlightbackground="#293A52")
+            card.grid(row=0, column=index, sticky="nsew", padx=(0 if index == 0 else 7, 0 if index == 3 else 7))
+            self.cards.grid_columnconfigure(index, weight=1, uniform="summary")
+            tk.Frame(card, bg=color, height=3).pack(fill="x", side="top", pady=(0, 12))
+            top = tk.Frame(card, bg=PANEL)
+            top.pack(fill="x")
+            tk.Label(top, text=label, bg=PANEL, fg=MUTED, font=("Segoe UI", 7, "bold")).pack(side="left", anchor="w")
+            icon = tk.Label(top, text=symbol, bg="#22334A", fg=color, font=("Segoe UI Symbol", 12, "bold"), width=2, pady=2)
+            icon.pack(side="right")
+            value = tk.Label(card, text="$0,00", bg=PANEL, fg=TEXT, font=("Segoe UI", 18, "bold"))
+            value.pack(anchor="w", pady=(11, 3))
+            tk.Label(card, text=caption, bg=PANEL, fg="#7F91A9", font=("Segoe UI", 8)).pack(anchor="w")
             self.card_values[key] = value
-        lower = ttk.Frame(self)
-        lower.pack(fill="both", expand=True, pady=(20, 0))
-        panel = tk.Frame(lower, bg=PANEL, padx=18, pady=18)
-        panel.pack(fill="both", expand=True, side="left")
-        tk.Label(panel, text="ACTIVIDAD", bg=PANEL, fg=TEXT, font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        self.activity_label = tk.Label(panel, text="", bg=PANEL, fg=MUTED, font=("Segoe UI", 10), justify="left", anchor="nw")
-        self.activity_label.pack(fill="both", expand=True, anchor="nw", pady=12)
-        actions = tk.Frame(lower, bg=BG, padx=18)
+
+        lower = tk.Frame(self, bg=BG)
+        lower.pack(fill="both", expand=True, pady=(18, 0))
+        activity = tk.Frame(lower, bg=PANEL, padx=19, pady=18, highlightthickness=1, highlightbackground="#293A52")
+        activity.pack(side="left", fill="both", expand=True)
+        activity_top = tk.Frame(activity, bg=PANEL)
+        activity_top.pack(fill="x")
+        tk.Label(activity_top, text="ACTIVIDAD FINANCIERA", bg=PANEL, fg=TEXT, font=("Segoe UI", 10, "bold")).pack(side="left")
+        tk.Label(activity_top, text="VISTA GENERAL", bg="#22334A", fg="#9CB2CC", font=("Segoe UI", 7, "bold"), padx=8, pady=4).pack(side="right")
+        self.activity_label = tk.Label(activity, text="", bg=PANEL, fg=MUTED, font=("Segoe UI", 10), justify="left", anchor="nw", wraplength=610)
+        self.activity_label.pack(fill="both", expand=True, anchor="nw", pady=(17, 10))
+
+        actions = tk.Frame(lower, bg=BG, width=218, padx=15)
         actions.pack(side="right", fill="y")
-        tk.Label(actions, text="ACCIONES RÁPIDAS", bg=BG, fg=MUTED, font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(3, 12))
-        ttk.Button(actions, text="＋ Registrar ingreso", style="Accent.TButton", command=lambda: self._new("income")).pack(fill="x", pady=4)
-        ttk.Button(actions, text="＋ Registrar gasto", command=lambda: self._new("expense")).pack(fill="x", pady=4)
-        ttk.Button(actions, text="＋ Nuevo cliente", command=self._new_client).pack(fill="x", pady=4)
-        ttk.Button(actions, text="Crear copia de seguridad", command=self.backup).pack(fill="x", pady=(18, 4))
-        ttk.Button(actions, text="Actualizar resumen", command=self.refresh).pack(fill="x", pady=4)
-        tk.Label(self, text="Los importes se almacenan en centavos enteros para evitar errores de precisión.", bg=BG, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w", pady=(12, 0))
+        actions.pack_propagate(False)
+        tk.Label(actions, text="ACCIONES RÁPIDAS", bg=BG, fg=MUTED, font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(4, 11))
+        self._action_button(actions, "＋  Registrar ingreso", lambda: self._new("income"), primary=True).pack(fill="x", pady=4)
+        self._action_button(actions, "＋  Registrar gasto", lambda: self._new("expense")).pack(fill="x", pady=4)
+        self._action_button(actions, "＋  Nuevo cliente", self._new_client).pack(fill="x", pady=4)
+        tk.Frame(actions, bg="#26364D", height=1).pack(fill="x", pady=13)
+        self._action_button(actions, "▣  Copia de seguridad", self.backup).pack(fill="x", pady=4)
+        self._action_button(actions, "⟳  Actualizar resumen", self.refresh).pack(fill="x", pady=4)
+
+        footer = tk.Frame(self, bg=BG)
+        footer.pack(fill="x", pady=(12, 0))
+        tk.Label(footer, text="Los importes se guardan en centavos enteros para mantener la precisión.", bg=BG, fg="#71849C", font=("Segoe UI", 8)).pack(side="left")
+        tk.Label(footer, text="ALMACENAMIENTO LOCAL", bg=BG, fg="#71849C", font=("Segoe UI", 8, "bold")).pack(side="right")
+
+    @staticmethod
+    def _action_button(parent, text, command, primary=False):
+        bg = ACCENT if primary else PANEL_ALT
+        fg = "#071522" if primary else TEXT
+        hover = "#67C3F2" if primary else "#2A3F5B"
+        button = tk.Button(
+            parent, text=text, command=command, anchor="w",
+            bg=bg, fg=fg, activebackground=hover, activeforeground=fg,
+            relief="flat", bd=0, highlightthickness=0,
+            padx=12, pady=11, font=("Segoe UI", 9, "bold" if primary else "normal"),
+            cursor="hand2",
+        )
+        button.bind("<Enter>", lambda _e: button.configure(bg=hover))
+        button.bind("<Leave>", lambda _e: button.configure(bg=bg))
+        return button
 
     def _new(self, direction):
         MovementDialog(self, direction, self.refresh_callback)
@@ -172,21 +383,48 @@ class DashboardView(ttk.Frame):
         except Exception as exc:
             messagebox.showerror("Error de copia", str(exc), parent=self)
 
+    def _animate_card(self, key, target_cents, color):
+        previous_after = self._animation_ids.pop(key, None)
+        if previous_after is not None:
+            try:
+                self.after_cancel(previous_after)
+            except tk.TclError:
+                pass
+        start = self._shown_values.get(key, 0)
+        steps = 12
+
+        def tick(step=1):
+            value = int(start + (target_cents - start) * step / steps)
+            self.card_values[key].configure(text=format_money(value), fg=color)
+            self._shown_values[key] = value
+            if step < steps:
+                self._animation_ids[key] = self.after(16, lambda: tick(step + 1))
+            else:
+                self._animation_ids.pop(key, None)
+                self._shown_values[key] = target_cents
+
+        tick()
+
     def refresh(self):
         try:
             summary = dashboard_summary()
-            self.card_values["income"].configure(text=format_money(summary["income_month_cents"]), fg=GREEN)
-            self.card_values["expenses"].configure(text=format_money(summary["expenses_month_cents"]), fg=RED)
-            self.card_values["net"].configure(text=format_money(summary["net_month_cents"]), fg=TEXT)
-            self.card_values["overdue"].configure(text=format_money(summary["overdue_total_cents"]), fg=RED if summary["overdue_total_cents"] else TEXT)
+            targets = {
+                "income": (summary["income_month_cents"], GREEN),
+                "expenses": (summary["expenses_month_cents"], RED),
+                "net": (summary["net_month_cents"], TEXT),
+                "overdue": (summary["overdue_total_cents"], "#E8B86D" if summary["overdue_total_cents"] else TEXT),
+            }
+            for key, (amount, color) in targets.items():
+                self._animate_card(key, int(amount), color)
             self.activity_label.configure(text=(
                 f"Clientes activos:  {summary['active_clients']}\n\n"
                 f"Clientes con mensualidades generadas vencidas:  {summary['clients_with_due_charges']}\n\n"
                 f"Ingresos del mes:  {format_money(summary['income_month_cents'])}\n"
                 f"Gastos del mes:  {format_money(summary['expenses_month_cents'])}\n"
                 f"Diferencia:  {format_money(summary['net_month_cents'])}\n\n"
-                "Consejo: registra los ingresos de mensualidades marcando la opción\n"
-                "'Aplicar a mensualidades' para que se distribuyan automáticamente."
+                "CONSEJO\n"
+                "Al registrar un ingreso de mensualidad, vincúlalo al cliente y activa "
+                "'Aplicar este ingreso a las mensualidades' para distribuirlo automáticamente."
             ))
         except Exception as exc:
             self.activity_label.configure(text=f"No se pudo cargar el resumen: {exc}")

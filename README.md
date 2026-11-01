@@ -1,10 +1,17 @@
 # Gestor Financiero
 
-**Versión 0.1.2** — refina la distribución cronológica de pagos, consultas históricas y trazabilidad de los clientes.
+**Versión 0.1.3** — incorpora una interfaz renovada con navegación lateral y animaciones ligeras, manteniendo el núcleo financiero local.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
 ## Incluye en esta versión
+
+- Interfaz renovada con navegación lateral y siete secciones.
+- Transiciones horizontales suaves entre secciones, sin librerías externas ni aceleración gráfica.
+- Estados visuales de navegación y botones con respuesta al pasar el cursor.
+- Tarjetas del panel con animación breve de conteo al actualizar los importes.
+- Diseño oscuro con jerarquía visual mejorada y espacio de trabajo ampliado.
+- Tamaño inicial de ventana adaptado a la resolución disponible del monitor.
 
 - Registro de ingresos y gastos, con motivo obligatorio.
 - Fecha de pago y fecha de registro automática.
@@ -140,3 +147,15 @@ Endpoints disponibles:
 ## Seguridad
 
 El programa guarda información financiera localmente. Protege la cuenta de Windows y el equipo con contraseña, conserva copias de seguridad cifradas fuera del dispositivo cuando sea posible y no compartas la carpeta de datos ni el token del puente.
+
+
+## Novedades de 0.1.3
+
+- Se reemplazaron las pestañas superiores por una barra lateral de navegación.
+- Se añadió una transición horizontal breve al cambiar de sección.
+- Los importes del panel principal cuentan suavemente hasta el valor actualizado.
+- Se rediseñaron las tarjetas financieras, las acciones rápidas y la cabecera.
+- Se agregaron atajos Ctrl+1 a Ctrl+7 para cambiar de sección.
+- El tamaño inicial y mínimo se ajusta a la resolución disponible para evitar que la ventana salga de la pantalla.
+- Las animaciones utilizan únicamente `after()` de Tkinter: no requieren GPU, procesos de fondo ni paquetes adicionales.
+- Se conserva la base de datos y toda la lógica financiera de la versión 0.1.2.
