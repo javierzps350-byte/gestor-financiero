@@ -1,6 +1,6 @@
 # Gestor Financiero
 
-**Versión 0.2.0** — incorpora un agente financiero local para consultar y administrar el programa mediante instrucciones escritas o, con el módulo opcional, por voz.
+**Versión 0.2.1** — incorpora un agente financiero local para consultar y administrar el programa mediante instrucciones escritas o, con el módulo opcional, por voz.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
@@ -196,3 +196,25 @@ El programa guarda información financiera localmente. Protege la cuenta de Wind
 - Se simplificó la cabecera, retirando la versión visible y los textos descriptivos redundantes.
 - Se reorganizó el panel principal con tarjetas más limpias, mejor espaciado y acciones rápidas sin adornos.
 - Se conservaron la navegación animada, el conteo de importes y todas las funciones financieras.
+
+## Actualizaciones de código sin descargar ZIP cada vez
+
+El proyecto incluye un actualizador incremental basado en Git. Se necesita Git for Windows una sola vez y un repositorio privado vacío de GitHub.
+
+### Configuración inicial (solo una vez)
+
+1. Instala Git for Windows: https://git-scm.com/download/win
+2. Crea en GitHub un repositorio **privado y vacío**. No inicialices README, licencia ni `.gitignore`.
+3. En la carpeta del proyecto ejecuta `configurar_actualizaciones.bat`.
+4. Pega la URL HTTPS o SSH del repositorio. Git puede solicitar iniciar sesión mediante Git Credential Manager.
+5. El asistente publicará el historial de código, sin incluir `data/`, evidencias, modelos, tokens ni copias de seguridad.
+
+### Uso diario
+
+- Abre el programa con `run_windows.bat` como siempre.
+- Para recibir código nuevo, cierra el programa y ejecuta `actualizar.bat`.
+- El actualizador descarga únicamente objetos/cambios nuevos del repositorio, aplica una actualización fast-forward, respalda `data/` antes de actualizar y vuelve a abrir el programa.
+- Si no hay cambios, no descarga ni reemplaza el código.
+- Si hay modificaciones locales sin guardar, se detiene para no sobrescribirlas.
+
+**Importante:** para que una actualización llegue al computador, el nuevo código debe publicarse primero en el repositorio remoto. Hasta que el repositorio privado esté creado y vinculado, el actualizador queda preparado pero no puede recibir versiones nuevas. El ZIP de esta versión se usa únicamente para instalar una vez esta capacidad y configurar el remoto.

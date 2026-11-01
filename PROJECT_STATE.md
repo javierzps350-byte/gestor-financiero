@@ -95,3 +95,12 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 7. Crear un commit con el cambio y generar el ZIP desde la rama principal actual.
 8. No incluir bases de datos, comprobantes, tokens, logs ni copias de seguridad personales en los paquetes de distribución.
 9. Nunca indicar que una prueba visual se hizo en Windows si solo se comprobó en otro entorno.
+
+## Actualizaciones incrementales — v0.2.1
+
+- Git es el mecanismo de sincronizacion del codigo, no de los datos personales.
+- Configuracion unica: `configurar_actualizaciones.bat` enlaza el clon con un repositorio privado y publica la rama `main`.
+- Actualizacion normal: cerrar la aplicacion y ejecutar `actualizar.bat`; `installer/update_windows.ps1` hace fetch, comprueba divergencias/cambios locales, respalda `data/` y aplica `git merge --ff-only`.
+- Nunca subir `data/`, evidencias, tokens, modelos ni respaldos al remoto.
+- El ZIP 0.2.1 solo es necesario para la transicion inicial. Las siguientes entregas deben publicarse como commits en el remoto para que el usuario actualice con `actualizar.bat`.
+- Pendiente: vincular el remoto privado del usuario y probar un ciclo real push -> fetch/pull en Windows.

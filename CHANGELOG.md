@@ -37,3 +37,12 @@
 ## Regla de mantenimiento
 
 Cada cambio futuro debe agregarse arriba de este registro. No se deben borrar entradas de versiones anteriores.
+
+## 0.2.1 — Actualizaciones incrementales
+
+- Se añadieron `actualizar.bat` y `installer/update_windows.ps1` para recibir cambios mediante Git sin descargar un ZIP completo en cada versión.
+- Se añadió `configurar_actualizaciones.bat` para vincular una sola vez la instalación con un repositorio privado.
+- El actualizador comprueba cambios locales antes de actuar y se niega a sobrescribir código modificado.
+- Antes de aplicar una actualización crea un respaldo ZIP de `data/` en `%LOCALAPPDATA%\GestorFinanciero\update_backups`.
+- Las actualizaciones se aplican con fast-forward; no fuerzan ni descartan cambios locales.
+- La base de datos, evidencias y copias de seguridad permanecen fuera del historial Git mediante `.gitignore`.
