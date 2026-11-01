@@ -44,7 +44,7 @@ class MainWindow:
         ("clients", "Clientes"),
         ("debts", "Mensualidades"),
         ("search", "Buscador"),
-        ("assistant", "Asistente"),
+        ("assistant", "Agente"),
     ]
 
     def __init__(self, root: tk.Tk):
@@ -149,7 +149,7 @@ class MainWindow:
         self.clients = ClientView(self.page_host, self.refresh_all)
         self.debts = DebtView(self.page_host)
         self.search = MovementView(self.page_host, "all", "Buscador")
-        self.assistant = AssistantView(self.page_host)
+        self.assistant = AssistantView(self.page_host, on_data_changed=self.refresh_all, on_navigate=self.show_page)
         self.pages = {
             "dashboard": self.dashboard,
             "incomes": self.incomes,

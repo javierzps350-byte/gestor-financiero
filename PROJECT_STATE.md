@@ -21,6 +21,7 @@ Aplicación de escritorio financiera independiente, orientada primero a Windows 
 - `v0.1.2`: reconstrucción de asignaciones por fecha real de pago, anulaciones, consultas históricas y comprobación de vouchers repetidos.
 - `v0.1.3`: navegación lateral y animaciones ligeras usando `after()` de Tkinter.
 - `v0.1.4`: limpieza visual, retirada de iconos decorativos y textos redundantes.
+- `v0.2.0`: agente financiero local con consultas, preparación de operaciones, confirmación, navegación y adjuntos de Descargas.
 
 La historia de Git contiene una instantánea de cada uno de esos paquetes.
 
@@ -30,8 +31,9 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 - `src/database/`: conexión SQLite, esquema y migraciones.
 - `src/domain/`: lógica de dinero y cálculo de mensualidades.
 - `src/services/`: operaciones financieras, evidencias y reportes.
-- `src/ui/`: ventana principal, vistas, diálogos y asistente.
-- `src/voice/`: reconocimiento de voz opcional.
+- `src/ui/`: ventana principal, vistas, diálogos y conversación con el agente.
+- `src/agent/`: interpretación de instrucciones, consultas, borradores de operaciones y confirmación.
+- `src/voice/`: reconocimiento de voz opcional que alimenta al agente.
 - `src/integrations/`: puente opcional con NEXUS.
 - `installer/`: empaquetado para Windows y requisitos opcionales.
 - `tests/`: pruebas automatizadas.
@@ -61,10 +63,11 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 6. Una anulación debe preservar el movimiento y su motivo de anulación; no borrar registros financieros.
 7. Toda migración de base de datos debe ser aditiva, idempotente y respaldar la base antes de modificarla.
 
-## Limitaciones conocidas de v0.1.4
+## Limitaciones conocidas de v0.2.0
 
 - No existe todavía edición directa de movimientos; el flujo actual es anular con motivo y volver a registrar.
-- El asistente puede consultar; no registra pagos dictados.
+- El agente puede preparar y confirmar registros por texto; el dictado por voz depende de instalar el módulo opcional de Vosk.
+- La comprensión es actualmente determinista por reglas y patrones; todavía no utiliza un LLM local. La arquitectura permite añadir un motor conversacional opcional más adelante.
 - El reconocimiento de voz es opcional y bajo demanda.
 - No hay OCR automático de vouchers.
 - La exportación XLSX/PDF aún no está terminada; existe CSV.
@@ -74,11 +77,12 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 ## Siguiente trabajo recomendado
 
 1. Probar la versión con la base de datos real del usuario y corregir incidencias sin tocar ni borrar sus datos.
-2. Terminar ficha de cliente y estado de cuenta con trazabilidad completa.
-3. Agregar edición segura de movimientos mediante historial de cambios/auditoría, sin sobrescribir silenciosamente movimientos previos.
-4. Incorporar exportación PDF/XLSX como dependencias opcionales.
-5. Medir consumo real y luego desarrollar el gestor de hardware.
-6. Implementar captura por voz y OCR solo como módulos opcionales.
+2. Ampliar el lenguaje natural del agente y agregar memoria conversacional útil, sin comprometer la seguridad de los registros.
+3. Terminar ficha de cliente y estado de cuenta con trazabilidad completa.
+4. Agregar edición segura de movimientos mediante historial de cambios/auditoría, sin sobrescribir silenciosamente movimientos previos.
+5. Incorporar exportación PDF/XLSX como dependencias opcionales.
+6. Medir consumo real y luego desarrollar el gestor de hardware.
+7. Implementar OCR solo como módulo opcional y bajo demanda.
 
 ## Protocolo obligatorio para cada actualización
 

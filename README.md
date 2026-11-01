@@ -1,6 +1,6 @@
 # Gestor Financiero
 
-**Versión 0.1.4** — incorpora una interfaz más limpia, con navegación sin iconos decorativos y sin etiquetas de estado que no aportan al trabajo diario.
+**Versión 0.2.0** — incorpora un agente financiero local para consultar y administrar el programa mediante instrucciones escritas o, con el módulo opcional, por voz.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
@@ -31,7 +31,13 @@ Aplicación de escritorio local para Windows, construida con Python, Tkinter y S
 - Consultas históricas que excluyen pagos cuya fecha sea posterior a la fecha consultada.
 - Historial de pagos por cliente, separando importe recibido, importe aplicado a cuotas y parte no aplicada.
 - Advertencia ante números de voucher repetidos; permite continuar cuando la repetición es legítima.
-- Asistente ligero para consultas escritas; voz local opcional.
+- Agente financiero ligero con consultas de ingresos, gastos, balance, clientes, deudas y vouchers.
+- Preparación de ingresos, gastos, clientes y cambios de tarifa mediante lenguaje natural.
+- Confirmación explícita antes de crear o modificar registros; las acciones también pueden confirmarse o cancelarse con «sí» o «no».
+- Selección guiada de archivos recientes de Descargas para adjuntarlos a ingresos o gastos existentes.
+- Navegación entre secciones mediante instrucciones como «abre clientes» o «ve a mensualidades».
+- Motor de interpretación determinista: no necesita LLM, Internet, GPU ni paquetes adicionales.
+- Reconocimiento de voz opcional, bajo demanda, conectado al mismo agente.
 - Puente opcional con NEXUS, aislado y desactivado por defecto.
 
 ## Actualizar desde versiones anteriores sin perder datos
@@ -95,9 +101,25 @@ La versión empaquetada guarda los datos de usuario en `%LOCALAPPDATA%\GestorFin
 - Cambiar una tarifa no reescribe períodos que ya tengan abonos. Las cuotas futuras sin abonos pueden actualizarse a la nueva tarifa.
 - Para anular un movimiento se exige un motivo. Sus distribuciones dejan de contar para los saldos.
 
-## Asistente por voz (opcional)
+## Agente financiero
 
-El núcleo funciona sin reconocimiento de voz. Para habilitar la captura de una sola intervención por micrófono:
+En la sección «Agente» puedes escribir instrucciones para consultar y administrar el sistema. El motor actual es local y ligero; interpreta comandos sin cargar modelos de lenguaje.
+
+Ejemplos:
+
+- `Carlos me pagó 25 dólares por mensualidad mediante transferencia, voucher 2581`.
+- `Pagué 18 dólares a Empresa Eléctrica por electricidad mediante efectivo`.
+- `Crea un cliente Ana López con mensualidad de 23 dólares desde 2026-01-31`.
+- `Cambia la mensualidad de Carlos a 30 dólares desde 2026-12-01`.
+- `¿Cuánto debe Carlos?`, `Busca el voucher 2581`, `¿Cuál es el balance del mes?`.
+- `Adjunta la descarga reciente al voucher 2581`.
+- `Abre la sección de clientes`.
+
+Los ingresos, gastos, clientes y cambios de tarifa se muestran primero como una vista previa. Debes confirmar la operación o cancelarla; el agente no guarda cambios financieros de manera silenciosa. Si hay varios comprobantes o movimientos posibles, te pide seleccionar el correcto.
+
+## Agente por voz (opcional)
+
+El agente escrito funciona sin reconocimiento de voz. Para habilitar la captura de una sola intervención por micrófono:
 
 1. Instala los paquetes opcionales:
 
@@ -106,9 +128,9 @@ El núcleo funciona sin reconocimiento de voz. Para habilitar la captura de una 
 ```
 
 2. Descarga un modelo español compatible con Vosk y colócalo en `models/vosk-es/`.
-3. Pulsa `Escuchar una vez` en la pestaña Asistente.
+3. Pulsa `Hablar` en la sección Agente.
 
-No hay escucha permanente. En esta versión el asistente permite consultas por texto o voz; no registra movimientos dictados automáticamente.
+No hay escucha permanente. El texto reconocido pasa por el mismo agente: puede consultar o preparar operaciones y seguirá requiriendo confirmación para guardar cambios.
 
 ## Puente opcional con NEXUS
 
@@ -136,11 +158,18 @@ Endpoints disponibles:
 - En la aplicación empaquetada: `%LOCALAPPDATA%\GestorFinanciero\`.
 - Se recomienda guardar copias adicionales en otro disco o unidad externa. La copia interna no sustituye una copia externa.
 
+## Alcance actual del agente
+
+- La comprensión es basada en reglas y patrones; todavía no utiliza un modelo generativo local.
+- Los nombres de clientes se deben pronunciar o escribir de forma suficientemente parecida al registro.
+- La búsqueda de comprobantes revisa nombres y fechas de archivos recientes; no lee automáticamente el contenido del PDF o la imagen (OCR pendiente).
+- Las operaciones pendientes viven en la sesión actual y se descartan si se cierra la aplicación antes de confirmar.
+
 ## Limitaciones de esta primera versión
 
 - La interfaz está en una primera versión funcional y no incluye todavía edición directa de movimientos; se puede anular con motivo y registrar el movimiento corregido.
 - No hay OCR automático de comprobantes ni lectura automática del contenido de transferencias de Descargas.
-- El asistente de voz solo consulta; no crea registros por dictado.
+- El dictado de voz utiliza el agente y puede preparar registros; las operaciones siguen requiriendo confirmación.
 - La conexión remota desde iPhone y el gestor inteligente de hardware se desarrollarán después de medir el consumo real.
 - Los CSV se abren con Excel; la exportación XLSX/PDF se incorporará como módulo opcional.
 

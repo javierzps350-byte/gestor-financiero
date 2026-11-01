@@ -3,74 +3,160 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from src.voice.assistant import handle_text_command
+from src.agent.controller import FinancialAgent
 from src.voice.speech import is_voice_engine_available, listen_once
+
+BG = "#0B1220"
 PANEL = "#131F31"
 TEXT = "#EDF2FA"
 MUTED = "#94A3B8"
+ACCENT = "#62B8E8"
 
 
 class AssistantView(ttk.Frame):
-    def __init__(self, parent):
+    """Conversational UI for the built-in financial agent."""
+
+    def __init__(self, parent, on_data_changed=None, on_navigate=None):
         super().__init__(parent, padding=20)
-        ttk.Label(self, text="Asistente", style="Title.TLabel").pack(anchor="w")
+        self.agent = FinancialAgent()
+        self.on_data_changed = on_data_changed or (lambda: None)
+        self.on_navigate = on_navigate or (lambda _page: None)
+        self._voice_queue = queue.Queue()
+        self._build()
+
+    def _build(self):
+        ttk.Label(self, text="Agente", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             self,
-            text="Consulta tus movimientos por texto o voz.",
+            text="Consulta y administra tus registros con instrucciones en lenguaje natural.",
             style="SubTitle.TLabel",
-        ).pack(anchor="w", pady=(4, 18))
-        examples = tk.Frame(self, bg=PANEL, padx=16, pady=14)
-        examples.pack(fill="x", pady=(0, 16))
-        tk.Label(examples, text="EJEMPLOS", bg=PANEL, fg=TEXT, font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        tk.Label(
-            examples,
-            text="• ¿Cuánto debe Carlos?\n• Ingresos del mes\n• Gastos del mes\n• Busca voucher 002581",
-            bg=PANEL, fg=MUTED, justify="left", font=("Segoe UI", 10),
-        ).pack(anchor="w", pady=(8, 0))
-        ttk.Label(self, text="Escribe una consulta").pack(anchor="w")
-        self.command_var = tk.StringVar()
-        entry = ttk.Entry(self, textvariable=self.command_var)
-        entry.pack(fill="x", pady=(4, 10))
-        entry.bind("<Return>", lambda _e: self.execute())
-        actions = ttk.Frame(self)
-        actions.pack(fill="x")
-        ttk.Button(actions, text="Consultar", style="Accent.TButton", command=self.execute).pack(side="left")
-        self.voice_button = ttk.Button(actions, text="Escuchar una vez", command=self.listen)
-        self.voice_button.pack(side="left", padx=8)
-        ttk.Label(actions, text="El reconocimiento de voz requiere configuración previa.", style="Hint.TLabel").pack(side="left", padx=8)
-        self.output = tk.Text(self, height=11, wrap="word", bg=PANEL, fg=TEXT, insertbackground=TEXT, relief="flat", padx=14, pady=12, font=("Segoe UI", 10), state="disabled")
-        self.output.pack(fill="both", expand=True, pady=(16, 0))
-        self._voice_queue = queue.Queue()
-        self._write("El asistente está listo. En esta versión permite realizar consultas; todavía no registra movimientos.")
-        if not is_voice_engine_available():
-            self.voice_button.configure(text="Configurar voz…")
+        ).pack(anchor="w", pady=(4, 14))
 
-    def _write(self, text):
-        self.output.configure(state="normal")
-        self.output.delete("1.0", "end")
-        self.output.insert("1.0", text)
-        self.output.configure(state="disabled")
+        self.chat = tk.Text(
+            self, wrap="word", bg=PANEL, fg=TEXT, insertbackground=TEXT,
+            relief="flat", padx=18, pady=16, font=("Segoe UI", 10),
+            state="disabled", spacing1=3, spacing3=9,
+        )
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.chat.yview)
+        self.chat.configure(yscrollcommand=scrollbar.set)
+        self.chat.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y", padx=(5, 0))
+        self.chat.tag_configure("user", foreground=ACCENT, font=("Segoe UI", 9, "bold"), spacing1=9)
+        self.chat.tag_configure("agent", foreground="#A9D7F0", font=("Segoe UI", 9, "bold"), spacing1=9)
+        self.chat.tag_configure("body", foreground=TEXT)
+        self.chat.tag_configure("muted", foreground=MUTED, font=("Segoe UI", 9))
+
+        self._append(
+            "Agente",
+            "Estoy listo. Puedo consultar tus cuentas, registrar ingresos y gastos, crear clientes y adjuntar comprobantes.\n\n"
+            "Prueba: «Carlos me pagó 25 dólares por mensualidad mediante transferencia, voucher 2581».\n"
+            "También puedes escribir «ayuda» para ver más ejemplos.",
+        )
+
+        input_area = ttk.Frame(self)
+        input_area.pack(fill="x", side="bottom", pady=(14, 0))
+        self.command_var = tk.StringVar()
+        self.entry = ttk.Entry(input_area, textvariable=self.command_var)
+        self.entry.pack(side="left", fill="x", expand=True, ipady=8)
+        self.entry.bind("<Return>", lambda _event: self.execute())
+        self.send_button = self._plain_button(input_area, "Enviar", self.execute, primary=True)
+        self.send_button.pack(side="left", padx=(8, 0))
+        self.voice_button = self._plain_button(input_area, "Hablar", self.listen)
+        self.voice_button.pack(side="left", padx=(8, 0))
+
+        self.pending_bar = tk.Frame(self, bg=BG)
+        self.confirm_button = self._plain_button(
+            self.pending_bar, "Confirmar operación", self.confirm, primary=True
+        )
+        self.cancel_button = self._plain_button(self.pending_bar, "Cancelar", self.cancel)
+        if not is_voice_engine_available():
+            self.voice_button.configure(state="disabled")
+            self._append("Sistema", "El reconocimiento de voz no está configurado en este equipo. Puedes usar el asistente por texto.", "muted")
+
+    @staticmethod
+    def _plain_button(parent, text, command, primary=False):
+        return tk.Button(
+            parent, text=text, command=command,
+            bg=ACCENT if primary else "#20334B",
+            fg="#081523" if primary else TEXT,
+            activebackground="#83CFF2" if primary else "#2A405C",
+            activeforeground="#081523" if primary else TEXT,
+            disabledforeground="#718096", font=("Segoe UI", 9, "bold" if primary else "normal"),
+            relief="flat", bd=0, highlightthickness=0,
+            padx=15, pady=9, cursor="hand2", takefocus=True,
+        )
+
+    def _append(self, speaker, message, tag="body"):
+        self.chat.configure(state="normal")
+        self.chat.insert("end", f"{speaker}\n", "user" if speaker == "Tú" else "agent" if speaker == "Agente" else "muted")
+        self.chat.insert("end", message + "\n\n", tag)
+        self.chat.configure(state="disabled")
+        self.chat.see("end")
+
+    def _refresh_pending_controls(self):
+        has_pending = self.agent.pending is not None
+        has_choice = self.agent.awaiting_choice is not None
+        self.pending_bar.pack_forget()
+        if has_pending and not has_choice:
+            self.pending_bar.pack(fill="x", side="bottom", pady=(10, 0))
+            self.cancel_button.pack(side="right")
+            self.confirm_button.pack(side="right", padx=(0, 8))
+            if self.agent.pending.get("awaiting"):
+                self.confirm_button.configure(state="disabled")
+            else:
+                self.confirm_button.configure(state="normal")
+        elif has_pending or has_choice:
+            self.pending_bar.pack(fill="x", side="bottom", pady=(10, 0))
+            self.cancel_button.pack(side="right")
+            self.confirm_button.pack_forget()
+        else:
+            self.confirm_button.pack_forget()
+            self.cancel_button.pack_forget()
 
     def execute(self):
-        command = self.command_var.get()
+        command = self.command_var.get().strip()
+        if not command:
+            return
+        self.command_var.set("")
+        self._append("Tú", command)
         try:
-            self._write(handle_text_command(command))
+            response = self.agent.handle(command)
+            self._append("Agente", response)
+            self._refresh_pending_controls()
+            if response.startswith(("Operación guardada", "Cliente creado", "Tarifa actualizada", "Comprobante adjuntado")):
+                self._notify_data_changed()
+            if self.agent.navigation_target:
+                destination = self.agent.navigation_target
+                self.agent.navigation_target = None
+                self.on_navigate(destination)
         except Exception as exc:
+            self._append("Agente", f"No pude procesar la instrucción: {exc}")
             messagebox.showerror("Error del asistente", str(exc), parent=self)
+
+    def confirm(self):
+        response = self.agent.confirm()
+        self._append("Agente", response)
+        self._refresh_pending_controls()
+        if response.startswith(("Operación guardada", "Cliente creado", "Tarifa actualizada", "Comprobante adjuntado")):
+            self._notify_data_changed()
+
+    def _notify_data_changed(self):
+        try:
+            self.on_data_changed()
+        except Exception as exc:
+            self._append("Sistema", f"El registro se guardó, pero no se pudo actualizar la vista: {exc}", "muted")
+
+    def cancel(self):
+        self._append("Agente", self.agent.cancel())
+        self._refresh_pending_controls()
 
     def listen(self):
         if not is_voice_engine_available():
-            messagebox.showinfo(
-                "Voz opcional",
-                "Para habilitar el reconocimiento de voz, instala las dependencias de installer/requirements_voice.txt "
-                "y coloca un modelo español compatible en models/vosk-es.",
-                parent=self,
-            )
+            messagebox.showinfo("Voz no configurada", "Instala los componentes opcionales de voz y coloca el modelo español indicado en la documentación.", parent=self)
             return
         self.voice_button.configure(state="disabled", text="Escuchando…")
-        self._write("Escuchando una intervención. Habla cerca del micrófono…")
-        worker = threading.Thread(target=self._listen_worker, daemon=True)
-        worker.start()
+        self._append("Sistema", "Escuchando. Habla ahora…", "muted")
+        threading.Thread(target=self._listen_worker, daemon=True).start()
         self.after(150, self._poll_voice_result)
 
     def _listen_worker(self):
@@ -85,10 +171,12 @@ class AssistantView(ttk.Frame):
         except queue.Empty:
             self.after(150, self._poll_voice_result)
             return
-        self.voice_button.configure(state="normal", text="Escuchar una vez")
+        self.voice_button.configure(state="normal", text="Hablar")
         if not ok:
-            messagebox.showerror("No se pudo reconocer la voz", result, parent=self)
+            self._append("Agente", f"No se pudo reconocer la voz: {result}")
             return
-        transcript = result.strip()
-        self.command_var.set(transcript)
-        self._write(handle_text_command(transcript) if transcript else "No se detectó una frase. Inténtalo nuevamente.")
+        self.command_var.set(result.strip())
+        if result.strip():
+            self.execute()
+        else:
+            self._append("Agente", "No se detectó una frase. Inténtalo nuevamente.")
