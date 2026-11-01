@@ -5,9 +5,9 @@ from tkinter import messagebox, ttk
 
 from src.voice.assistant import handle_text_command
 from src.voice.speech import is_voice_engine_available, listen_once
-PANEL = "#172235"
-TEXT = "#E8EEF7"
-MUTED = "#9AAAC0"
+PANEL = "#131F31"
+TEXT = "#EDF2FA"
+MUTED = "#94A3B8"
 
 
 class AssistantView(ttk.Frame):
@@ -16,7 +16,7 @@ class AssistantView(ttk.Frame):
         ttk.Label(self, text="Asistente", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             self,
-            text="Consultas rápidas por texto o voz. El micrófono solo se activa al pulsar el botón.",
+            text="Consulta tus movimientos por texto o voz.",
             style="SubTitle.TLabel",
         ).pack(anchor="w", pady=(4, 18))
         examples = tk.Frame(self, bg=PANEL, padx=16, pady=14)
@@ -35,15 +35,15 @@ class AssistantView(ttk.Frame):
         actions = ttk.Frame(self)
         actions.pack(fill="x")
         ttk.Button(actions, text="Consultar", style="Accent.TButton", command=self.execute).pack(side="left")
-        self.voice_button = ttk.Button(actions, text="🎙 Escuchar una vez", command=self.listen)
+        self.voice_button = ttk.Button(actions, text="Escuchar una vez", command=self.listen)
         self.voice_button.pack(side="left", padx=8)
-        ttk.Label(actions, text="El reconocimiento de voz es opcional y requiere instalar un modelo local.", style="Hint.TLabel").pack(side="left", padx=8)
+        ttk.Label(actions, text="El reconocimiento de voz requiere configuración previa.", style="Hint.TLabel").pack(side="left", padx=8)
         self.output = tk.Text(self, height=11, wrap="word", bg=PANEL, fg=TEXT, insertbackground=TEXT, relief="flat", padx=14, pady=12, font=("Segoe UI", 10), state="disabled")
         self.output.pack(fill="both", expand=True, pady=(16, 0))
         self._voice_queue = queue.Queue()
-        self._write("El asistente está listo. Por ahora realiza consultas; no registra ni modifica movimientos sin una confirmación explícita.")
+        self._write("El asistente está listo. En esta versión permite realizar consultas; todavía no registra movimientos.")
         if not is_voice_engine_available():
-            self.voice_button.configure(text="🎙 Configurar voz…")
+            self.voice_button.configure(text="Configurar voz…")
 
     def _write(self, text):
         self.output.configure(state="normal")
@@ -62,9 +62,8 @@ class AssistantView(ttk.Frame):
         if not is_voice_engine_available():
             messagebox.showinfo(
                 "Voz opcional",
-                "Para habilitar voz local instala las dependencias de installer/requirements_voice.txt "
-                "y coloca un modelo español compatible en models/vosk-es.\n\n"
-                "La aplicación seguirá funcionando sin este componente.",
+                "Para habilitar el reconocimiento de voz, instala las dependencias de installer/requirements_voice.txt "
+                "y coloca un modelo español compatible en models/vosk-es.",
                 parent=self,
             )
             return
@@ -86,7 +85,7 @@ class AssistantView(ttk.Frame):
         except queue.Empty:
             self.after(150, self._poll_voice_result)
             return
-        self.voice_button.configure(state="normal", text="🎙 Escuchar una vez")
+        self.voice_button.configure(state="normal", text="Escuchar una vez")
         if not ok:
             messagebox.showerror("No se pudo reconocer la voz", result, parent=self)
             return

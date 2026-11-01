@@ -14,12 +14,12 @@ def primary_button(parent, text: str, command):
     """Button with explicit Tk styling to avoid ttk theme/DPI rendering quirks."""
     return tk.Button(
         parent, text=text, command=command,
-        bg="#35A7E8", fg="#071522",
-        activebackground="#67C3F2", activeforeground="#071522",
+        bg="#62B8E8", fg="#081523",
+        activebackground="#83CFF2", activeforeground="#081523",
         disabledforeground="#718096",
         font=("Segoe UI", 9, "bold"),
         relief="flat", bd=0, highlightthickness=0,
-        padx=17, pady=8, cursor="hand2",
+        padx=18, pady=9, cursor="hand2",
         takefocus=True,
     )
 
@@ -32,7 +32,7 @@ class BaseDialog(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
-        self.configure(bg="#101827")
+        self.configure(bg="#0B1220")
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
 
@@ -192,7 +192,7 @@ class MovementDialog(BaseDialog):
         if direction == "income":
             ttk.Checkbutton(body, text="Aplicar este ingreso a las mensualidades del cliente", variable=self.vars["apply"]).pack(anchor="w", pady=(12, 4))
         ttk.Label(body, text="Observaciones (opcional)").pack(anchor="w", pady=(9, 3))
-        self.notes = tk.Text(body, height=3, wrap="word", bg="#172235", fg="#EDF3FC", insertbackground="white", relief="flat", padx=9, pady=7)
+        self.notes = tk.Text(body, height=3, wrap="word", bg="#131F31", fg="#EDF2FA", insertbackground="white", relief="flat", padx=9, pady=7)
         self.notes.pack(fill="x")
         evidence_frame = ttk.Frame(body)
         evidence_frame.pack(fill="x", pady=(12, 0))

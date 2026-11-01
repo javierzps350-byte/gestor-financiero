@@ -1,17 +1,17 @@
 # Gestor Financiero
 
-**Versión 0.1.3** — incorpora una interfaz renovada con navegación lateral y animaciones ligeras, manteniendo el núcleo financiero local.
+**Versión 0.1.4** — incorpora una interfaz más limpia, con navegación sin iconos decorativos y sin etiquetas de estado que no aportan al trabajo diario.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
 ## Incluye en esta versión
 
-- Interfaz renovada con navegación lateral y siete secciones.
-- Transiciones horizontales suaves entre secciones, sin librerías externas ni aceleración gráfica.
-- Estados visuales de navegación y botones con respuesta al pasar el cursor.
-- Tarjetas del panel con animación breve de conteo al actualizar los importes.
-- Diseño oscuro con jerarquía visual mejorada y espacio de trabajo ampliado.
-- Tamaño inicial de ventana adaptado a la resolución disponible del monitor.
+- Interfaz depurada con navegación lateral de texto, sin iconos decorativos.
+- Se eliminaron etiquetas de estado, mensajes promocionales y textos técnicos redundantes de la pantalla principal.
+- Cabecera simplificada y mayor espacio para el contenido.
+- Tarjetas financieras con jerarquía tipográfica más clara y colores discretos.
+- Transiciones suaves entre secciones y animación breve de los importes.
+- Botones de acciones rápidas con estados visuales al pasar el cursor.
 
 - Registro de ingresos y gastos, con motivo obligatorio.
 - Fecha de pago y fecha de registro automática.
@@ -159,3 +159,11 @@ El programa guarda información financiera localmente. Protege la cuenta de Wind
 - El tamaño inicial y mínimo se ajusta a la resolución disponible para evitar que la ventana salga de la pantalla.
 - Las animaciones utilizan únicamente `after()` de Tkinter: no requieren GPU, procesos de fondo ni paquetes adicionales.
 - Se conserva la base de datos y toda la lógica financiera de la versión 0.1.2.
+
+## Novedades de 0.1.4
+
+- Se eliminaron iconos y símbolos decorativos de la navegación, tarjetas y acciones rápidas.
+- Se quitaron las etiquetas “local y privado”, “datos en este equipo”, “almacenamiento local” y mensajes similares de la interfaz.
+- Se simplificó la cabecera, retirando la versión visible y los textos descriptivos redundantes.
+- Se reorganizó el panel principal con tarjetas más limpias, mejor espaciado y acciones rápidas sin adornos.
+- Se conservaron la navegación animada, el conteo de importes y todas las funciones financieras.
