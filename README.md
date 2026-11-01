@@ -1,5 +1,7 @@
 # Gestor Financiero
 
+**Versión 0.1.1** — incluye actualización automática y segura de bases de datos anteriores.
+
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
 ## Incluye en esta versión
@@ -20,6 +22,14 @@ Aplicación de escritorio local para Windows, construida con Python, Tkinter y S
 - Anulación controlada de movimientos, conservando el registro de auditoría.
 - Asistente ligero para consultas escritas; voz local opcional.
 - Puente opcional con NEXUS, aislado y desactivado por defecto.
+
+## Actualizar desde 0.1.0 sin perder datos
+
+1. Cierra el programa.
+2. Descomprime la versión nueva en la carpeta del proyecto, reemplazando los archivos del programa, pero no elimines la carpeta `data/`.
+3. Ejecuta `run_windows.bat` nuevamente.
+
+Al iniciar, el programa detecta columnas faltantes y las agrega sin borrar los clientes ni los movimientos existentes. Antes de modificar una base antigua crea un respaldo `*_antes_actualizacion_*.sqlite3` junto a la base de datos.
 
 ## Requisitos
 

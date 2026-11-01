@@ -10,7 +10,9 @@ from src.utils.logging_config import configure_logging
 def main():
     configure_logging()
     try:
-        initialize_database()
+        migrations = initialize_database()
+        if migrations:
+            logging.info("Actualización de base de datos aplicada: %s", "; ".join(migrations))
         run_app()
     except Exception as exc:
         logging.exception("Error fatal al iniciar la aplicación")

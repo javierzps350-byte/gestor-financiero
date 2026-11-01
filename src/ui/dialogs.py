@@ -8,6 +8,20 @@ from src.services.finance_service import create_client, create_movement, list_cl
 from src.services.evidence_service import attach_evidence, find_recent_downloads
 
 
+def primary_button(parent, text: str, command):
+    """Button with explicit Tk styling to avoid ttk theme/DPI rendering quirks."""
+    return tk.Button(
+        parent, text=text, command=command,
+        bg="#35A7E8", fg="#071522",
+        activebackground="#67C3F2", activeforeground="#071522",
+        disabledforeground="#718096",
+        font=("Segoe UI", 9, "bold"),
+        relief="flat", bd=0, highlightthickness=0,
+        padx=17, pady=8, cursor="hand2",
+        takefocus=True,
+    )
+
+
 class BaseDialog(tk.Toplevel):
     def __init__(self, parent, title: str, size: str = "620x620"):
         super().__init__(parent)
@@ -22,7 +36,7 @@ class BaseDialog(tk.Toplevel):
 
 class ClientDialog(BaseDialog):
     def __init__(self, parent, on_saved):
-        super().__init__(parent, "Nuevo cliente", "570x570")
+        super().__init__(parent, "Nuevo cliente", "600x650")
         self.on_saved = on_saved
         self.vars = {
             "name": tk.StringVar(), "identification": tk.StringVar(),
@@ -42,7 +56,7 @@ class ClientDialog(BaseDialog):
         buttons = ttk.Frame(body)
         buttons.pack(fill="x", side="bottom")
         ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right", padx=(8, 0))
-        ttk.Button(buttons, text="Guardar cliente", style="Accent.TButton", command=self.save).pack(side="right")
+        primary_button(buttons, "Guardar cliente", self.save).pack(side="right", ipadx=3, ipady=1)
 
     def _field(self, parent, label, key):
         ttk.Label(parent, text=label).pack(anchor="w", pady=(8, 3))
@@ -127,7 +141,7 @@ class RateDialog(BaseDialog):
         buttons = ttk.Frame(body)
         buttons.pack(fill="x", side="bottom", pady=(12, 0))
         ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right", padx=(8, 0))
-        ttk.Button(buttons, text="Guardar tarifa", style="Accent.TButton", command=self.save).pack(side="right")
+        primary_button(buttons, "Guardar tarifa", self.save).pack(side="right", ipadx=3, ipady=1)
 
     def save(self):
         try:
@@ -188,7 +202,7 @@ class MovementDialog(BaseDialog):
         buttons = ttk.Frame(body)
         buttons.pack(fill="x", side="bottom", pady=(14, 0))
         ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right", padx=(8, 0))
-        ttk.Button(buttons, text="Guardar movimiento", style="Accent.TButton", command=self.save).pack(side="right")
+        primary_button(buttons, "Guardar movimiento", self.save).pack(side="right", ipadx=3, ipady=1)
 
     def _field(self, parent, label, key):
         ttk.Label(parent, text=label).pack(anchor="w", pady=(9, 3))
