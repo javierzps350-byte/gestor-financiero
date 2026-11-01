@@ -1,0 +1,2 @@
+# Núcleo: únicamente bibliotecas estándar de Python.
+# Tkinter se distribuye con las instalaciones habituales de Python para Windows.

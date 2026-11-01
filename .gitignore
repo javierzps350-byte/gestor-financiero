@@ -1,0 +1,15 @@
+.venv/
+.build-venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.db
+build/
+dist/
+*.spec
+logs/*
+!logs/.gitkeep
+models/*
+!models/README.md
+data/*
+!data/.gitkeep
