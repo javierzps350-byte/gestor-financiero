@@ -1,6 +1,6 @@
 # Gestor Financiero
 
-**Versión 0.6.0** — corrige el calendario en formularios modales, añade exportación filtrada a PDF/Excel/XML/TXT/CSV y paquetes completos de traslado `.gfbak`, además de los temas visuales y el panel interactivo.
+**Versión 0.6.1** — mejora la estabilidad de los formularios, fija los botones Guardar/Cancelar, permite cerrar el calendario con clic exterior o Escape, corrige superficies claras del tema oscuro y evita bloqueos al solicitar exportaciones/evidencias sin resultados.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
@@ -11,6 +11,15 @@ Aplicación de escritorio local para Windows, construida con Python, Tkinter y S
 - El selector de temas está en la parte inferior del menú lateral y se abre como panel flotante visual. La cabecera ya no contiene un selector de texto, evitando la selección persistente del nombre del tema.
 - El acceso a las herramientas de datos abre un panel de acciones en lugar de un menú nativo con flecha.
 - Se mantienen los tres temas y la preferencia visual guardada.
+
+## Correcciones de estabilidad 0.6.1
+
+- Los formularios de clientes, tarifas e ingresos/gastos tienen una zona de contenido desplazable y un pie fijo. Los botones **Guardar** y **Cancelar** permanecen accesibles aunque el formulario sea más alto que el espacio disponible.
+- El calendario se cierra al volver a pulsar su botón, al hacer clic fuera o al presionar **Esc**. Al seleccionar una fecha, el valor se escribe en formato `AAAA-MM-DD` y el foco vuelve al campo.
+- En tema oscuro se ajustan la lista de opciones de los selectores, los estados de foco, casillas, tablas y bordes; se evitan superficies blancas residuales.
+- Abrir evidencias sin seleccionar un movimiento, consultar un movimiento sin adjuntos o exportar una búsqueda vacía presenta una indicación breve dentro de la pantalla, sin abrir diálogos innecesarios.
+- Las ventanas premium recuperan el foco y la captura modal de su ventana anterior al cerrarse.
+- Las animaciones y el sondeo de voz cancelan sus temporizadores al cerrar vistas; las consultas de filtros/evidencias cierran sus conexiones SQLite correctamente.
 
 ## Incluye en esta versión
 

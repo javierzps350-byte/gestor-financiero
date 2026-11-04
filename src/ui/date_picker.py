@@ -11,6 +11,7 @@ import calendar
 import tkinter as tk
 from datetime import date
 from tkinter import ttk
+import weakref
 
 from src.ui.premium import palette_for
 
@@ -19,6 +20,38 @@ MONTHS = (
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 )
 WEEKDAYS = ("L", "M", "X", "J", "V", "S", "D")
+
+# One lightweight dispatcher per Tk root avoids leaving stale global bindings
+# when many date fields are created and destroyed by page navigation.
+_ACTIVE_PICKERS = weakref.WeakKeyDictionary()
+_BOUND_ROOTS = weakref.WeakSet()
+
+
+def _active_picker_set(root):
+    pickers = _ACTIVE_PICKERS.get(root)
+    if pickers is None:
+        pickers = weakref.WeakSet()
+        _ACTIVE_PICKERS[root] = pickers
+    if root not in _BOUND_ROOTS:
+        root.bind_all("<Button-1>", lambda event, target=root: _dispatch_global_click(target, event), add="+")
+        root.bind_all("<Escape>", lambda event, target=root: _dispatch_global_escape(target, event), add="+")
+        _BOUND_ROOTS.add(root)
+    return pickers
+
+
+def _dispatch_global_click(root, event):
+    for picker in tuple(_ACTIVE_PICKERS.get(root, ())):
+        picker._handle_global_click(event)
+    return None
+
+
+def _dispatch_global_escape(root, _event=None):
+    active = tuple(_ACTIVE_PICKERS.get(root, ()))
+    if not active:
+        return None
+    for picker in active:
+        picker._close_calendar(restore_focus=True)
+    return "break"
 
 
 def month_weeks(year: int, month: int):
@@ -37,6 +70,7 @@ class DatePickerEntry(ttk.Frame):
         self._popup: tk.Frame | None = None
         self._day_buttons: list[tk.Button] = []
         self._focus_job = None
+        self._root_widget = None
         self.entry = ttk.Entry(self, textvariable=self.variable, width=width)
         self.entry.pack(side="left", fill="x", expand=True)
         palette = palette_for(parent)
@@ -50,6 +84,8 @@ class DatePickerEntry(ttk.Frame):
         self.button.pack(side="left", padx=(5, 0))
         self.button.bind("<Enter>", self._hover)
         self.button.bind("<Leave>", self._unhover)
+        self.button.bind("<Escape>", self._on_owner_escape, add="+")
+        self.entry.bind("<Escape>", self._on_owner_escape, add="+")
         self.bind("<Destroy>", self._on_destroy, add="+")
 
     def _cancel_focus_job(self):
@@ -64,7 +100,7 @@ class DatePickerEntry(ttk.Frame):
         if event is not None and event.widget is not self:
             return
         self._cancel_focus_job()
-        self._close_calendar()
+        self._close_calendar(restore_focus=False)
 
     def _hover(self, _event=None):
         palette = palette_for(self)
@@ -84,7 +120,8 @@ class DatePickerEntry(ttk.Frame):
         if self._popup is not None:
             try:
                 if self._popup.winfo_exists():
-                    self._popup.lift()
+                    # The calendar icon acts as a toggle, not as a redundant lift.
+                    self._close_calendar(restore_focus=True)
                     return
             except tk.TclError:
                 self._popup = None
@@ -107,6 +144,8 @@ class DatePickerEntry(ttk.Frame):
             highlightthickness=0, takefocus=True,
         )
         self._popup = popup
+        self._root_widget = self._root()
+        _active_picker_set(self._root_widget).add(self)
         card = tk.Frame(popup, bg=palette["panel"], padx=13, pady=12)
         card.pack(fill="both", expand=True)
 
@@ -127,6 +166,7 @@ class DatePickerEntry(ttk.Frame):
                 font=("Segoe UI", 9, "bold"), cursor="hand2", takefocus=True,
                 padx=4, pady=4, **kwargs,
             )
+            button.bind("<Escape>", lambda _event: close(), add="+")
             return button
 
         grid = tk.Frame(card, bg=palette["panel"])
@@ -199,7 +239,7 @@ class DatePickerEntry(ttk.Frame):
                         "<Leave>",
                         lambda _event, target=button, bg=background, fg=foreground: target.configure(bg=bg, fg=fg),
                     )
-                    button.bind("<Escape>", lambda _event: close())
+                    button.bind("<Escape>", lambda _event: close(), add="+")
                     self._day_buttons.append(button)
 
         def choose_today():
@@ -255,8 +295,45 @@ class DatePickerEntry(ttk.Frame):
         except tk.TclError:
             pass
 
-    def _close_calendar(self):
+    @staticmethod
+    def _is_descendant(widget, ancestor):
+        """Return whether a Tk widget belongs to an ancestor widget subtree."""
+        current = widget
+        while current is not None:
+            if current is ancestor:
+                return True
+            try:
+                current = current.master
+            except AttributeError:
+                return False
+        return False
+
+    def _handle_global_click(self, event):
+        popup = self._popup
+        if popup is None:
+            return
+        clicked = getattr(event, "widget", None)
+        # Keep the calendar open for clicks inside itself or in its own entry/button.
+        # Clicking another date field closes this one before that field opens.
+        if self._is_descendant(clicked, popup) or self._is_descendant(clicked, self):
+            return
+        self._close_calendar(restore_focus=False)
+
+    def _on_owner_escape(self, _event=None):
+        if self._popup is not None:
+            self._close_calendar(restore_focus=True)
+            return "break"
+        return None
+
+    def _close_calendar(self, restore_focus=True):
         self._cancel_focus_job()
+        root = self._root_widget
+        self._root_widget = None
+        if root is not None:
+            try:
+                _ACTIVE_PICKERS.get(root, weakref.WeakSet()).discard(self)
+            except (KeyError, TypeError):
+                pass
         popup = self._popup
         self._popup = None
         self._day_buttons.clear()
@@ -266,8 +343,9 @@ class DatePickerEntry(ttk.Frame):
                     popup.destroy()
             except tk.TclError:
                 pass
-        try:
-            if self.entry.winfo_exists():
-                self.entry.focus_set()
-        except tk.TclError:
-            pass
+        if restore_focus:
+            try:
+                if self.entry.winfo_exists():
+                    self.entry.focus_set()
+            except tk.TclError:
+                pass

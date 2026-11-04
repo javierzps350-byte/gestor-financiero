@@ -1,5 +1,18 @@
 # Historial de cambios
 
+
+## [0.6.1] — Estabilidad de formularios, calendario y acciones sin resultados
+- Los formularios de clientes, cambio de tarifa e ingresos/gastos usan un cuerpo desplazable con botones Guardar y Cancelar anclados en un pie fijo. La altura se adapta al área disponible del monitor y conserva los botones visibles incluso con escalado DPI o ventanas más pequeñas.
+- El calendario desplegable se cierra al pulsar su propio botón, al hacer clic fuera o con Escape. Los clics fuera no roban el foco del control que el usuario acaba de pulsar; la selección de una fecha devuelve el foco al campo correspondiente.
+- Se mantiene el calendario como overlay dentro del formulario modal: no crea otra ventana ni sustituye la captura de foco del formulario.
+- El tema oscuro aplica colores semánticos a la lista nativa de los selectores, estados de foco, indicadores de casillas, bordes y superficies de tablas para evitar puntos o fragmentos blancos.
+- Las acciones de exportar y abrir evidencias muestran un aviso no modal cuando no hay movimientos o selección; no abren diálogos del sistema innecesarios ni dejan la aplicación bloqueada.
+- Los diálogos premium y sus ventanas anidadas se elevan y reciben el foco después de mostrarse; al cerrarse cancelan tareas de animación pendientes y restauran la captura modal anterior.
+- Las animaciones del dashboard, transiciones entre secciones y sondeo de voz cancelan sus tareas `after()` al cerrar la aplicación o destruir la vista, evitando callbacks dirigidos a widgets que ya no existen.
+- Las consultas de filtros y evidencias usan el administrador de conexión que cierra SQLite correctamente al terminar; se eliminan conexiones abiertas innecesariamente durante la navegación.
+- Se añadieron pruebas de regresión para la visibilidad de Guardar/Cancelar, cierre del calendario, limpieza de eventos, colores del tema oscuro y acciones con listas vacías.
+- No se modificó el esquema financiero ni se añadieron dependencias externas.
+
 ## [0.6.0] — Refinamiento visual y controles elegantes
 - Se refinó el estilo global de botones, campos de texto, cajas de búsqueda, selectores y tablas con espaciado más cómodo, bordes discretos y estados de foco/hover coherentes en los tres temas.
 - Se incorporó `ElegantCombobox`: los menús desplegables ya no muestran la flecha lateral antigua; toda la barra funciona como superficie de apertura y conserva el desplegable nativo de Tk.

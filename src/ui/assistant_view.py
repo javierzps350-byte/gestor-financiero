@@ -23,6 +23,7 @@ class AssistantView(ttk.Frame):
         self.on_data_changed = on_data_changed or (lambda: None)
         self.on_navigate = on_navigate or (lambda _page: None)
         self._voice_queue = queue.Queue()
+        self._voice_poll_job = None
         self._build()
 
     def _build(self):
@@ -176,7 +177,7 @@ class AssistantView(ttk.Frame):
         self.voice_button.configure(state="disabled", text="Escuchando…")
         self._append("Sistema", "Escuchando. Habla ahora…", "muted")
         threading.Thread(target=self._listen_worker, daemon=True).start()
-        self.after(150, self._poll_voice_result)
+        self._voice_poll_job = self.after(150, self._poll_voice_result)
 
     def _listen_worker(self):
         try:
@@ -185,10 +186,11 @@ class AssistantView(ttk.Frame):
             self._voice_queue.put((False, str(exc)))
 
     def _poll_voice_result(self):
+        self._voice_poll_job = None
         try:
             ok, result = self._voice_queue.get_nowait()
         except queue.Empty:
-            self.after(150, self._poll_voice_result)
+            self._voice_poll_job = self.after(150, self._poll_voice_result)
             return
         self.voice_button.configure(state="normal", text="Hablar")
         if not ok:
@@ -199,3 +201,12 @@ class AssistantView(ttk.Frame):
             self.execute()
         else:
             self._append("Agente", "No se detectó una frase. Inténtalo nuevamente.")
+
+    def destroy(self):
+        job, self._voice_poll_job = self._voice_poll_job, None
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
+        super().destroy()

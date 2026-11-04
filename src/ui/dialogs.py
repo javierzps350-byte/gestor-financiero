@@ -34,21 +34,103 @@ class BaseDialog(tk.Toplevel):
         self._fade_job = None
         self._destroying = False
         self.title(title)
-        self.geometry(size)
-        self.resizable(False, False)
-        self.transient(parent.winfo_toplevel())
-        self.grab_set()
         self.theme_manager = getattr(parent.winfo_toplevel(), "theme_manager", None)
         self._palette = self.theme_manager.palette if self.theme_manager else palette_for(parent)
         self.configure(bg=self._palette["bg"], highlightthickness=1, highlightbackground=self._palette["border"])
         tk.Frame(self, bg=self._palette["accent"], height=4).pack(fill="x", side="top")
+        self.transient(parent.winfo_toplevel())
+        self.resizable(True, True)
+        self._set_responsive_geometry(parent, size)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self._center_over(parent)
+        self.grab_set()
         try:
             self.attributes("-alpha", 0.0)
             self._fade_job = self.after(10, self._fade_in)
         except tk.TclError:
             pass
+
+    def _set_responsive_geometry(self, parent, requested_size):
+        """Keep dialogs within the work area; long forms scroll inside them."""
+        try:
+            requested_width, requested_height = (int(part) for part in requested_size.lower().split("x", 1))
+        except (TypeError, ValueError):
+            requested_width, requested_height = 620, 620
+        screen_width = max(640, self.winfo_screenwidth())
+        screen_height = max(520, self.winfo_screenheight())
+        width = min(requested_width, screen_width - 56)
+        height = min(requested_height, screen_height - 100)
+        width = max(480, width)
+        height = max(420, height)
+        self.geometry(f"{width}x{height}")
+        self.minsize(min(width, 520), min(height, 440))
+        self._center_over(parent)
+
+    def create_form_layout(self, padding=24):
+        """Create a scrollable form body with a permanently visible action footer."""
+        palette = self._palette
+
+        footer = ttk.Frame(self, padding=(padding, 10, padding, max(12, padding - 8)))
+        footer.pack(side="bottom", fill="x")
+        ttk.Separator(self, orient="horizontal").pack(side="bottom", fill="x")
+
+        viewport = ttk.Frame(self)
+        viewport.pack(side="top", fill="both", expand=True)
+        viewport.rowconfigure(0, weight=1)
+        viewport.columnconfigure(0, weight=1)
+
+        canvas = tk.Canvas(
+            viewport, bg=palette["bg"], bd=0, highlightthickness=0,
+            yscrollincrement=24, takefocus=False,
+        )
+        scrollbar = ttk.Scrollbar(viewport, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=lambda first, last: self._sync_form_scrollbar(scrollbar, first, last))
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        body = ttk.Frame(canvas, padding=padding)
+        window_id = canvas.create_window((0, 0), window=body, anchor="nw")
+
+        body.bind(
+            "<Configure>",
+            lambda _event: canvas.configure(scrollregion=canvas.bbox("all")),
+            add="+",
+        )
+        canvas.bind(
+            "<Configure>",
+            lambda event: canvas.itemconfigure(window_id, width=event.width),
+            add="+",
+        )
+        self._form_canvas = canvas
+        self._form_body = body
+        self._form_scrollbar = scrollbar
+        self.bind("<MouseWheel>", self._on_form_mousewheel, add="+")
+        self.bind("<Button-4>", lambda _event: self._scroll_form(-1), add="+")
+        self.bind("<Button-5>", lambda _event: self._scroll_form(1), add="+")
+        return body, footer
+
+    @staticmethod
+    def _sync_form_scrollbar(scrollbar, first, last):
+        scrollbar.set(first, last)
+        try:
+            if float(first) <= 0.0 and float(last) >= 1.0:
+                scrollbar.grid_remove()
+            else:
+                scrollbar.grid()
+        except (ValueError, tk.TclError):
+            pass
+
+    def _on_form_mousewheel(self, event):
+        if hasattr(self, "_form_canvas"):
+            delta = -1 if event.delta > 0 else 1
+            self._scroll_form(delta * max(1, abs(int(event.delta / 120))))
+            return "break"
+        return None
+
+    def _scroll_form(self, units):
+        if hasattr(self, "_form_canvas"):
+            try:
+                self._form_canvas.yview_scroll(int(units), "units")
+            except tk.TclError:
+                pass
 
     def destroy(self):
         if self._destroying:
@@ -97,8 +179,7 @@ class ClientDialog(BaseDialog):
             "phone": tk.StringVar(), "email": tk.StringVar(),
             "amount": tk.StringVar(), "start": tk.StringVar(value=date.today().isoformat()),
         }
-        body = ttk.Frame(self, padding=24)
-        body.pack(fill="both", expand=True)
+        body, buttons = self.create_form_layout(padding=24)
         ttk.Label(body, text="Registrar cliente", style="DialogTitle.TLabel").pack(anchor="w", pady=(0, 16))
         self._field(body, "Nombre o razón social *", "name")
         self._field(body, "Identificación (opcional)", "identification")
@@ -107,8 +188,6 @@ class ClientDialog(BaseDialog):
         self._field(body, "Mensualidad en dólares *", "amount")
         self._field(body, "Primera fecha de cobro (AAAA-MM-DD) *", "start")
         ttk.Label(body, text="El día de cobro se toma de la primera fecha. Los cambios de tarifa tendrán una fecha de vigencia.", style="Hint.TLabel", wraplength=500).pack(anchor="w", pady=(7, 16))
-        buttons = ttk.Frame(body)
-        buttons.pack(fill="x", side="bottom")
         ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right", padx=(8, 0))
         primary_button(buttons, "Guardar cliente", self.save).pack(side="right", ipadx=3, ipady=1)
         self._apply_theme()
@@ -176,8 +255,7 @@ class RateDialog(BaseDialog):
         super().__init__(parent, "Cambiar tarifa", "500x480")
         self.on_saved = on_saved
         self.clients = list_clients()
-        body = ttk.Frame(self, padding=24)
-        body.pack(fill="both", expand=True)
+        body, buttons = self.create_form_layout(padding=24)
         ttk.Label(body, text="Nueva tarifa mensual", style="DialogTitle.TLabel").pack(anchor="w", pady=(0, 16))
         ttk.Label(body, text="Cliente").pack(anchor="w", pady=(5, 3))
         self.client_map = {f'{c["id"]} — {c["name"]}': c["id"] for c in self.clients}
@@ -192,8 +270,6 @@ class RateDialog(BaseDialog):
         ttk.Label(body, text="Fecha desde la que aplica").pack(anchor="w", pady=(12, 3))
         DatePickerEntry(body, textvariable=self.date_var).pack(fill="x")
         ttk.Label(body, text="Usa como fecha de vigencia el inicio de un ciclo mensual.", style="Hint.TLabel").pack(anchor="w", pady=8)
-        buttons = ttk.Frame(body)
-        buttons.pack(fill="x", side="bottom", pady=(12, 0))
         ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right", padx=(8, 0))
         primary_button(buttons, "Guardar tarifa", self.save).pack(side="right", ipadx=3, ipady=1)
         self._apply_theme()
@@ -232,8 +308,7 @@ class MovementDialog(BaseDialog):
             "client": tk.StringVar(), "apply": tk.BooleanVar(value=False),
             "category": tk.StringVar(value="Otros"),
         }
-        body = ttk.Frame(self, padding=22)
-        body.pack(fill="both", expand=True)
+        body, buttons = self.create_form_layout(padding=22)
         ttk.Label(body, text=title, style="DialogTitle.TLabel").pack(anchor="w", pady=(0, 12))
         if direction == "income":
             ttk.Label(body, text="Cliente registrado (opcional)").pack(anchor="w", pady=(5, 3))
@@ -267,8 +342,6 @@ class MovementDialog(BaseDialog):
         ttk.Button(evidence_frame, text="Agregar archivos…", command=self.choose_files).pack(side="right")
         self.files_label = ttk.Label(body, text="No hay archivos seleccionados.", style="Hint.TLabel", wraplength=560)
         self.files_label.pack(anchor="w", pady=(5, 0))
-        buttons = ttk.Frame(body)
-        buttons.pack(fill="x", side="bottom", pady=(14, 0))
         ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right", padx=(8, 0))
         primary_button(buttons, "Guardar movimiento", self.save).pack(side="right", ipadx=3, ipady=1)
         self._apply_theme()

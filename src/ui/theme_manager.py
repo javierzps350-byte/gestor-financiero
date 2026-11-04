@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import tkinter as tk
 from tkinter import ttk
 
 from src.config import DATA_DIR
@@ -113,11 +114,31 @@ class ThemeManager:
         style.configure("Hint.TLabel", background=p["bg"], foreground=p["muted"], font=("Segoe UI", 9))
         style.configure("Title.TLabel", background=p["bg"], foreground=p["text"], font=("Segoe UI", 21, "bold"))
         style.configure("SubTitle.TLabel", background=p["bg"], foreground=p["muted"], font=("Segoe UI", 9))
+        style.configure("TSeparator", background=p["border"])
+
+        # The native ttk combobox popdown is a classic Tk Listbox on Windows.
+        # Theme it explicitly; otherwise dark mode can leave bright white specks
+        # and corners around the dropdown and its selection surface.
+        for option, value in {
+            "*TCombobox*Listbox.background": p["input"],
+            "*TCombobox*Listbox.foreground": p["text"],
+            "*TCombobox*Listbox.selectBackground": p["selected"],
+            "*TCombobox*Listbox.selectForeground": p["text"],
+            "*TCombobox*Listbox.highlightThickness": 0,
+            "*TCombobox*Listbox.borderWidth": 0,
+            "*TCombobox*Listbox.relief": "flat",
+        }.items():
+            try:
+                root.option_add(option, value)
+            except tk.TclError:
+                pass
+
         # A restrained visual system shared by every form and filter.
         style.configure(
             "TButton", font=("Segoe UI", 9), padding=(15, 9),
             background=p["panel_alt"], foreground=p["text"],
             borderwidth=0, relief="flat", focusthickness=0,
+            focuscolor=p["panel_alt"],
         )
         style.map(
             "TButton",
@@ -127,7 +148,7 @@ class ThemeManager:
         style.configure(
             "Accent.TButton", background=p["accent"], foreground=p["panel"],
             font=("Segoe UI", 9, "bold"), padding=(17, 10), borderwidth=0,
-            relief="flat", focusthickness=0,
+            relief="flat", focusthickness=0, focuscolor=p["accent"],
         )
         style.map("Accent.TButton", background=[("pressed", p["accent_hover"]), ("active", p["accent_hover"])])
         style.configure(
@@ -141,6 +162,7 @@ class ThemeManager:
             insertcolor=p["text"], bordercolor=p["border"], lightcolor=p["border"],
             darkcolor=p["border"], padding=(12, 9), borderwidth=1,
             relief="flat", font=("Segoe UI", 10),
+            focuscolor=p["input"], focusthickness=0,
         )
         style.map(
             "TEntry", fieldbackground=[("disabled", p["panel_alt"])],
@@ -163,6 +185,7 @@ class ThemeManager:
             foreground=p["text"], bordercolor=p["border"], lightcolor=p["border"],
             darkcolor=p["border"], padding=(12, 9), borderwidth=1,
             relief="flat", font=("Segoe UI", 10),
+            focuscolor=p["input"], focusthickness=0,
         )
         style.map(
             "Elegant.TCombobox",
@@ -172,15 +195,33 @@ class ThemeManager:
             lightcolor=[("focus", p["accent"]), ("!focus", p["border"])],
             darkcolor=[("focus", p["accent"]), ("!focus", p["border"])],
         )
-        style.configure("TCheckbutton", background=p["bg"], foreground=p["text"], font=("Segoe UI", 9), padding=(3, 5))
-        style.map("TCheckbutton", background=[("active", p["bg"])], foreground=[("disabled", p["muted"])])
+        style.configure(
+            "TCheckbutton", background=p["bg"], foreground=p["text"],
+            indicatorcolor=p["input"], focuscolor=p["bg"],
+            font=("Segoe UI", 9), padding=(3, 5), borderwidth=0,
+        )
+        style.map(
+            "TCheckbutton",
+            background=[("active", p["bg"])],
+            foreground=[("disabled", p["muted"])],
+            indicatorcolor=[("selected", p["accent"]), ("active", p["selected"]), ("!selected", p["input"])],
+        )
         style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
-        style.configure("Treeview", background=p["panel"], fieldbackground=p["panel"], foreground=p["text"], rowheight=34, borderwidth=0, relief="flat", font=("Segoe UI", 9))
+        style.configure(
+            "Treeview", background=p["panel"], fieldbackground=p["panel"],
+            foreground=p["text"], rowheight=34, borderwidth=0, relief="flat",
+            font=("Segoe UI", 9), bordercolor=p["border"],
+            lightcolor=p["border"], darkcolor=p["border"], focuscolor=p["panel"],
+        )
         style.configure("Treeview.Heading", background=p["table_header"], foreground=p["muted"], relief="flat", borderwidth=0, font=("Segoe UI", 8, "bold"), padding=(12, 11))
         style.map("Treeview", background=[("selected", p["selected"])], foreground=[("selected", p["text"])])
         style.layout("Vertical.TScrollbar", [("Vertical.Scrollbar.trough", {"sticky": "ns", "children": [("Vertical.Scrollbar.thumb", {"sticky": "nswe"})]})])
         style.layout("Horizontal.TScrollbar", [("Horizontal.Scrollbar.trough", {"sticky": "we", "children": [("Horizontal.Scrollbar.thumb", {"sticky": "nswe"})]})])
-        style.configure("TScrollbar", background=p["panel_alt"], troughcolor=p["bg"], bordercolor=p["bg"], arrowcolor=p["muted"], width=10)
+        style.configure(
+            "TScrollbar", background=p["panel_alt"], troughcolor=p["bg"],
+            bordercolor=p["bg"], arrowcolor=p["muted"], width=9,
+            relief="flat", borderwidth=0, gripcount=0,
+        )
 
     def recolor_tree(self, widget) -> None:
         """Recolor classic Tk widgets using semantic roles from their current colors."""
@@ -202,7 +243,7 @@ class ThemeManager:
                 if role:
                     updates[foreground_key] = p[role]
 
-            for option in ("activebackground", "highlightbackground", "troughcolor", "insertbackground", "selectbackground"):
+            for option in ("activebackground", "highlightbackground", "highlightcolor", "troughcolor", "insertbackground", "selectbackground"):
                 if option in keys:
                     role = _role_for_color(widget.cget(option))
                     if role:

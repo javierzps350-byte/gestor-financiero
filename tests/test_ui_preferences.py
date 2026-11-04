@@ -62,6 +62,79 @@ class DatePickerCalendarTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             month_weeks(2026, 13)
 
+
+    def test_date_calendar_toggles_closes_on_escape_and_outside_click(self):
+        import os
+        if os.environ.get("GF_RUN_UI_TESTS") != "1":
+            self.skipTest("Activa GF_RUN_UI_TESTS=1 para ejecutar pruebas visuales Tkinter")
+        import tkinter as tk
+        from datetime import date
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(f"No hay entorno gráfico disponible: {exc}")
+        try:
+            root.geometry("760x520+10+10")
+            form = tk.Toplevel(root)
+            form.geometry("520x400+40+40")
+            form.grab_set()
+            variable = tk.StringVar(value=date.today().isoformat())
+            picker = DatePickerEntry(form, textvariable=variable)
+            picker.pack(fill="x", padx=20, pady=24)
+            outside = tk.Button(form, text="Otro control")
+            outside.pack(padx=20, pady=35)
+            root.update()
+
+            picker.open_calendar()
+            root.update()
+            self.assertIsNotNone(picker._popup)
+            self.assertTrue(picker._popup.winfo_ismapped())
+
+            # Clicking the same calendar button toggles it closed.
+            picker.open_calendar()
+            root.update()
+            self.assertIsNone(picker._popup)
+
+            picker.open_calendar()
+            root.update()
+            picker.entry.focus_force()
+            picker.entry.event_generate("<KeyPress-Escape>")
+            root.update()
+            self.assertIsNone(picker._popup)
+
+            picker.open_calendar()
+            root.update()
+            outside.event_generate("<Button-1>", x=4, y=4)
+            root.update()
+            self.assertIsNone(picker._popup)
+            self.assertIs(root.grab_current(), form)
+        finally:
+            root.destroy()
+
+    def test_calendar_dismiss_bindings_are_removed_when_picker_is_destroyed(self):
+        import os
+        if os.environ.get("GF_RUN_UI_TESTS") != "1":
+            self.skipTest("Activa GF_RUN_UI_TESTS=1 para ejecutar pruebas visuales Tkinter")
+        import tkinter as tk
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(f"No hay entorno gráfico disponible: {exc}")
+        try:
+            picker = DatePickerEntry(root)
+            picker.pack(padx=20, pady=20)
+            root.update()
+            picker.open_calendar()
+            root.update()
+            from src.ui.date_picker import _ACTIVE_PICKERS
+            self.assertIn(picker, tuple(_ACTIVE_PICKERS.get(root, ())))
+            picker.destroy()
+            root.update()
+            self.assertNotIn(picker, tuple(_ACTIVE_PICKERS.get(root, ())))
+            self.assertIsNone(picker._popup)
+        finally:
+            root.destroy()
+
     def test_calendar_overlay_works_inside_a_modal_form_without_stealing_grab(self):
         import os
         if os.environ.get("GF_RUN_UI_TESTS") != "1":
@@ -102,6 +175,59 @@ class DatePickerCalendarTests(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_client_rate_and_movement_dialogs_keep_save_cancel_visible(self):
+        import os
+        if os.environ.get("GF_RUN_UI_TESTS") != "1":
+            self.skipTest("Activa GF_RUN_UI_TESTS=1 para ejecutar pruebas visuales Tkinter")
+        import tkinter as tk
+        from unittest.mock import patch
+        from src.ui.dialogs import ClientDialog, RateDialog, MovementDialog
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(f"No hay entorno gráfico disponible: {exc}")
+
+        def walk(parent):
+            for child in parent.winfo_children():
+                yield child
+                yield from walk(child)
+
+        fake_client = {"id": 7, "name": "Cliente de prueba", "current_rate_cents": 2300}
+        try:
+            root.geometry("980x700+10+10")
+            with patch("src.ui.dialogs.list_clients", return_value=[fake_client]):
+                dialogs = [
+                    ClientDialog(root, lambda: None),
+                    RateDialog(root, lambda: None, initial_client_id=7),
+                    MovementDialog(root, "income", lambda: None),
+                    MovementDialog(root, "expense", lambda: None),
+                ]
+            for dialog in dialogs:
+                root.update()
+                buttons = [
+                    widget for widget in walk(dialog)
+                    if isinstance(widget, (tk.Button,)) or widget.winfo_class() == "TButton"
+                ]
+                labels = [str(widget.cget("text")) for widget in buttons if "text" in widget.keys()]
+                self.assertTrue(any("Guardar" in label for label in labels), labels)
+                self.assertTrue(any("Cancelar" in label for label in labels), labels)
+                for widget in buttons:
+                    if str(widget.cget("text")) in {"Guardar cliente", "Guardar tarifa", "Guardar movimiento", "Cancelar"}:
+                        self.assertTrue(widget.winfo_ismapped())
+                        bottom = widget.winfo_rooty() + widget.winfo_height()
+                        dialog_bottom = dialog.winfo_rooty() + dialog.winfo_height()
+                        self.assertLessEqual(bottom, dialog_bottom)
+                # The same pinned footer remains visible after shrinking the form.
+                dialog.geometry(f"{dialog.winfo_width()}x480+30+30")
+                root.update()
+                for widget in buttons:
+                    if str(widget.cget("text")) in {"Guardar cliente", "Guardar tarifa", "Guardar movimiento", "Cancelar"}:
+                        self.assertTrue(widget.winfo_ismapped())
+                dialog.destroy()
+                root.update()
+        finally:
+            root.destroy()
+
     def test_nested_premium_dialog_restores_the_parent_modal_grab(self):
         import os
         if os.environ.get("GF_RUN_UI_TESTS") != "1":
@@ -123,6 +249,7 @@ class DatePickerCalendarTests(unittest.TestCase):
             message = PremiumMessageDialog(form, "Prueba", "Mensaje de prueba", confirm=True)
             root.update()
             self.assertIs(root.grab_current(), message)
+            self.assertTrue(message.winfo_ismapped())
             message.destroy()
             root.update()
             self.assertIs(root.grab_current(), original_grab)

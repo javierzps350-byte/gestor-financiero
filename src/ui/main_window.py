@@ -11,7 +11,7 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 
 from src.config import APP_NAME, BACKUP_DIR, EVIDENCE_DIR
-from src.database.connection import connect
+from src.database.connection import get_connection
 from src.domain.money import format_money
 from src.services.finance_service import (
     client_debt_summary, client_payment_history, dashboard_visual_data,
@@ -59,6 +59,7 @@ class MainWindow:
         self.root = root
         self.current_page = None
         self._transition_token = 0
+        self._transition_after_id = None
         self._nav_widgets = {}
         self.theme_manager = ThemeManager()
         root.theme_manager = self.theme_manager
@@ -80,9 +81,23 @@ class MainWindow:
         self._configure_style()
         self._build_shell()
         self.apply_theme()
+        root.bind("<Destroy>", self._on_root_destroy, add="+")
 
     def _configure_style(self):
         self.theme_manager.configure_styles(self.root)
+
+    def _cancel_transition(self):
+        job, self._transition_after_id = self._transition_after_id, None
+        if job is not None:
+            try:
+                self.root.after_cancel(job)
+            except tk.TclError:
+                pass
+
+    def _on_root_destroy(self, event):
+        if event.widget is self.root:
+            self._transition_token += 1
+            self._cancel_transition()
 
     def apply_theme(self):
         charts = (self.dashboard.line_chart, self.dashboard.donut_chart) if hasattr(self, "dashboard") else ()
@@ -386,6 +401,7 @@ class MainWindow:
             return
         if page_id == self.current_page:
             return
+        self._cancel_transition()
         self._transition_token += 1
         token = self._transition_token
         old_page = self.pages.get(self.current_page) if self.current_page else None
@@ -412,8 +428,11 @@ class MainWindow:
             offset = int(start_x * (1 - eased))
             new_page.place_configure(x=offset)
             if step + 1 < frames:
-                self.root.after(duration_ms, lambda: animate_step(step + 1))
+                self._transition_after_id = self.root.after(
+                    duration_ms, lambda: animate_step(step + 1)
+                )
             else:
+                self._transition_after_id = None
                 new_page.place_configure(x=0)
 
         animate_step()
@@ -443,6 +462,16 @@ class DashboardView(ttk.Frame):
         self._target_values = {"balance": 0, "income": 0, "expenses": 0}
         self._animation_ids = {}
         self._build()
+
+    def destroy(self):
+        """Cancel value animations before Tk removes their callback commands."""
+        for job in tuple(self._animation_ids.values()):
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
+        self._animation_ids.clear()
+        super().destroy()
 
     def _panel(self, parent, **kwargs):
         return tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=BORDER, **kwargs)
@@ -716,7 +745,7 @@ class MovementView(ttk.Frame):
         clients = list_clients(active_only=False)
         self.client_map = {"Todos los clientes": None}
         self.client_map.update({f'{c["id"]} — {c["name"]}': int(c["id"]) for c in clients})
-        with connect() as connection:
+        with get_connection() as connection:
             years = [str(row[0]) for row in connection.execute(
                 "SELECT DISTINCT substr(payment_date,1,4) FROM movements ORDER BY 1 DESC"
             ).fetchall() if row[0]]
@@ -793,8 +822,15 @@ class MovementView(ttk.Frame):
         actions.pack(fill="x", pady=(12, 0))
         ttk.Button(actions, text="Abrir evidencia", command=self.open_evidence).pack(side="left")
         ttk.Button(actions, text="Anular movimiento…", command=self.void_selected).pack(side="left", padx=8)
+        self.action_status_var = tk.StringVar(value="")
+        self.action_status_label = ttk.Label(
+            actions, textvariable=self.action_status_var, style="Hint.TLabel",
+            anchor="w", wraplength=360,
+        )
+        self.action_status_label.pack(side="left", fill="x", expand=True, padx=(10, 6))
         ttk.Button(actions, text="Exportar resultados…", style="Accent.TButton", command=self.export).pack(side="right")
         ttk.Button(actions, text="Actualizar", command=self.refresh).pack(side="right", padx=8)
+        self._status_clear_job = None
         self.refresh()
 
     def refresh_filter_options(self):
@@ -804,7 +840,7 @@ class MovementView(ttk.Frame):
         self.client_map.update({f'{c["id"]} — {c["name"]}': int(c["id"]) for c in clients})
         self.client_box.configure(values=list(self.client_map))
         self.client_var.set(selected if selected in self.client_map else "Todos los clientes")
-        with connect() as connection:
+        with get_connection() as connection:
             years = [str(row[0]) for row in connection.execute(
                 "SELECT DISTINCT substr(payment_date,1,4) FROM movements ORDER BY 1 DESC"
             ).fetchall() if row[0]]
@@ -885,6 +921,10 @@ class MovementView(ttk.Frame):
             rows = search_movements(**filters)
             self.last_rows = rows
             self.tree.delete(*self.tree.get_children())
+            if rows:
+                self.set_action_status(f"{len(rows):,} movimientos encontrados.", duration_ms=2200)
+            else:
+                self.set_action_status("No hay movimientos que coincidan con los filtros.", duration_ms=3600)
             for row in rows:
                 state = "Anulado" if row["status"] == "void" else "Vigente"
                 self.tree.insert("", "end", iid=str(row["id"]), values=(
@@ -897,10 +937,22 @@ class MovementView(ttk.Frame):
         except Exception as exc:
             messagebox.showerror("Error de búsqueda", str(exc), parent=self)
 
+    def set_action_status(self, text: str, duration_ms: int = 5200):
+        """Show non-modal feedback so empty-result actions never block the UI."""
+        self.action_status_var.set(text)
+        job, self._status_clear_job = self._status_clear_job, None
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
+        if text:
+            self._status_clear_job = self.after(duration_ms, lambda: self.action_status_var.set(""))
+
     def selected_id(self):
         selected = self.tree.selection()
         if not selected:
-            messagebox.showwarning("Selecciona un movimiento", "Primero selecciona un movimiento de la lista.", parent=self)
+            self.set_action_status("Selecciona un movimiento de la lista para continuar.")
             return None
         return int(selected[0])
 
@@ -908,10 +960,10 @@ class MovementView(ttk.Frame):
         movement_id = self.selected_id()
         if movement_id is None:
             return
-        with connect() as connection:
+        with get_connection() as connection:
             rows = connection.execute("SELECT * FROM evidence_files WHERE movement_id=? ORDER BY id", (movement_id,)).fetchall()
         if not rows:
-            messagebox.showinfo("Sin evidencias", "Este movimiento no tiene archivos adjuntos.", parent=self)
+            self.set_action_status("Este movimiento no tiene evidencias adjuntas.")
             return
         if len(rows) == 1:
             self._open_path(evidence_absolute_path(rows[0]["relative_path"]))
@@ -948,6 +1000,15 @@ class MovementView(ttk.Frame):
         except Exception as exc:
             messagebox.showerror("No se pudo abrir", str(exc))
 
+    def destroy(self):
+        job, self._status_clear_job = getattr(self, "_status_clear_job", None), None
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
+        super().destroy()
+
     def void_selected(self):
         movement_id = self.selected_id()
         if movement_id is None:
@@ -971,9 +1032,11 @@ class MovementView(ttk.Frame):
         ttk.Button(frame, text="Anular movimiento", style="Accent.TButton", command=confirm).pack(anchor="e", pady=(8, 0))
 
     def export(self):
+        # Do not open a modal confirmation or a native file dialog when there is
+        # nothing to export. This is a common first-run state and must be instant.
         if not self.last_rows:
-            if not messagebox.askyesno("Exportar sin resultados", "La búsqueda actual no tiene movimientos. ¿Deseas generar un archivo vacío con los filtros aplicados?", parent=self):
-                return
+            self.set_action_status("No hay movimientos para exportar. Ajusta los filtros o registra un movimiento.")
+            return
         extension_types = [
             ("PDF", "*.pdf"), ("Libro de Excel", "*.xlsx"),
             ("XML de datos", "*.xml"), ("Texto", "*.txt"),

@@ -64,7 +64,18 @@ class PremiumMessageDialog(tk.Toplevel):
         self._place(parent)
         self._capture_previous_grab(parent)
         self.grab_set()
+        self._activation_job = self.after_idle(self._activate_modal)
         self._fade_job = self.after(10, self._fade_in)
+
+    def _activate_modal(self):
+        self._activation_job = None
+        try:
+            if self.winfo_exists():
+                self.deiconify()
+                self.lift()
+                self.focus_force()
+        except tk.TclError:
+            pass
 
     def _capture_previous_grab(self, parent):
         try:
@@ -83,6 +94,12 @@ class PremiumMessageDialog(tk.Toplevel):
         previous = self._previous_grab
         self._previous_grab = None
         self._cancel_fade()
+        activation, self._activation_job = getattr(self, "_activation_job", None), None
+        if activation is not None:
+            try:
+                self.after_cancel(activation)
+            except tk.TclError:
+                pass
         try:
             try:
                 self.grab_release()
@@ -214,7 +231,19 @@ class PremiumWindow(tk.Toplevel):
         if modal:
             self._capture_previous_grab(owner)
             self.grab_set()
+        self._activation_job = self.after_idle(self._activate_window)
         self._fade_job = self.after(10, self._fade_in)
+
+    def _activate_window(self):
+        self._activation_job = None
+        try:
+            if self.winfo_exists():
+                self.deiconify()
+                self.lift()
+                if self.modal:
+                    self.focus_force()
+        except tk.TclError:
+            pass
 
     def _capture_previous_grab(self, owner):
         if owner is None:
@@ -234,6 +263,12 @@ class PremiumWindow(tk.Toplevel):
         previous = self._previous_grab
         self._previous_grab = None
         self._cancel_fade()
+        activation, self._activation_job = getattr(self, "_activation_job", None), None
+        if activation is not None:
+            try:
+                self.after_cancel(activation)
+            except tk.TclError:
+                pass
         try:
             if self.modal:
                 try:

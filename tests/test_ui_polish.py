@@ -48,6 +48,68 @@ class ElegantControlTests(unittest.TestCase):
         finally:
             root.destroy()
 
+
+    def test_dark_theme_uses_non_white_focus_and_popdown_colors(self):
+        if os.environ.get("GF_RUN_UI_TESTS") != "1":
+            self.skipTest("Activa GF_RUN_UI_TESTS=1 para ejecutar pruebas visuales Tkinter")
+        import tkinter as tk
+        from tkinter import ttk
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(f"No hay entorno gráfico: {exc}")
+        try:
+            manager = ThemeManager()
+            manager.set_theme("oscuro")
+            manager.configure_styles(root)
+            style = ttk.Style(root)
+            palette = manager.palette
+            self.assertEqual(style.lookup("TEntry", "focuscolor"), palette["input"])
+            self.assertEqual(style.lookup("Elegant.TCombobox", "focuscolor"), palette["input"])
+            self.assertEqual(style.lookup("Treeview", "focuscolor"), palette["panel"])
+            self.assertEqual(style.lookup("TCheckbutton", "indicatorcolor"), palette["input"])
+        finally:
+            root.destroy()
+
+    def test_empty_movement_actions_return_without_modal_or_file_dialog(self):
+        if os.environ.get("GF_RUN_UI_TESTS") != "1":
+            self.skipTest("Activa GF_RUN_UI_TESTS=1 para ejecutar pruebas visuales Tkinter")
+        import tkinter as tk
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from src.database import connection
+        from src.ui import theme_manager
+        from src.ui.main_window import MovementView
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(f"No hay entorno gráfico: {exc}")
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            with patch.object(connection, "DB_PATH", base / "data" / "test.sqlite3"), \
+                 patch.object(theme_manager, "DATA_DIR", base / "data"):
+                connection.initialize_database()
+                try:
+                    view = MovementView(root, "income", "Ingresos")
+                    view.pack(fill="both", expand=True)
+                    root.geometry("1000x600")
+                    root.update()
+                    with patch("src.ui.main_window.filedialog.asksaveasfilename") as save_dialog, \
+                         patch("src.ui.main_window.messagebox.askyesno") as confirm, \
+                         patch("src.ui.main_window.messagebox.showwarning") as warning, \
+                         patch("src.ui.main_window.messagebox.showinfo") as info:
+                        view.export()
+                        self.assertIn("No hay movimientos", view.action_status_var.get())
+                        view.open_evidence()
+                        self.assertIn("Selecciona un movimiento", view.action_status_var.get())
+                        self.assertFalse(save_dialog.called)
+                        self.assertFalse(confirm.called)
+                        self.assertFalse(warning.called)
+                        self.assertFalse(info.called)
+                finally:
+                    root.destroy()
+
     def test_sidebar_theme_picker_changes_theme_without_text_combobox(self):
         if os.environ.get("GF_RUN_UI_TESTS") != "1":
             self.skipTest("Activa GF_RUN_UI_TESTS=1 para ejecutar pruebas visuales Tkinter")

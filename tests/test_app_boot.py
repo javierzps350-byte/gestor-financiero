@@ -35,8 +35,16 @@ class AppBootTests(unittest.TestCase):
                     )
                     self.assertGreater(root.winfo_width(), 1000)
                     self.assertGreater(root.winfo_height(), 600)
+                    # Dashboard value animations are pending after the initial
+                    # refresh; destroying the window must cancel every callback.
+                    self.assertTrue(app.dashboard._animation_ids)
+                    app.show_page("incomes", animate=True)
+                    self.assertIsNotNone(app._transition_after_id)
                 finally:
                     root.destroy()
+                    if "app" in locals():
+                        self.assertEqual(app.dashboard._animation_ids, {})
+                        self.assertIsNone(app._transition_after_id)
 
 
 if __name__ == "__main__":
