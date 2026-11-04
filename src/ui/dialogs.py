@@ -30,6 +30,8 @@ def primary_button(parent, text: str, command):
 class BaseDialog(tk.Toplevel):
     def __init__(self, parent, title: str, size: str = "620x620"):
         super().__init__(parent)
+        self._fade_job = None
+        self._destroying = False
         self.title(title)
         self.geometry(size)
         self.resizable(False, False)
@@ -43,9 +45,21 @@ class BaseDialog(tk.Toplevel):
         self._center_over(parent)
         try:
             self.attributes("-alpha", 0.0)
-            self.after(10, self._fade_in)
+            self._fade_job = self.after(10, self._fade_in)
         except tk.TclError:
             pass
+
+    def destroy(self):
+        if self._destroying:
+            return
+        self._destroying = True
+        job, self._fade_job = self._fade_job, None
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
+        super().destroy()
 
     def _center_over(self, parent):
         self.update_idletasks()
@@ -63,7 +77,9 @@ class BaseDialog(tk.Toplevel):
         except tk.TclError:
             return
         if step < 7 and self.winfo_exists():
-            self.after(16, lambda: self._fade_in(step + 1))
+            self._fade_job = self.after(16, lambda: self._fade_in(step + 1))
+        else:
+            self._fade_job = None
 
     def _apply_theme(self):
         manager = getattr(self.master.winfo_toplevel(), "theme_manager", None)
@@ -156,7 +172,7 @@ class ClientDialog(BaseDialog):
 
 class RateDialog(BaseDialog):
     def __init__(self, parent, on_saved, initial_client_id=None):
-        super().__init__(parent, "Cambiar tarifa", "500x360")
+        super().__init__(parent, "Cambiar tarifa", "500x480")
         self.on_saved = on_saved
         self.clients = list_clients()
         body = ttk.Frame(self, padding=24)

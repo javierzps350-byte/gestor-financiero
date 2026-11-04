@@ -24,6 +24,7 @@ Aplicación de escritorio financiera independiente, orientada primero a Windows 
 - `v0.2.0`: agente financiero local con consultas, preparación de operaciones, confirmación, navegación y adjuntos de Descargas.
 - `v0.3.0`: rediseño claro inspirado en panel financiero, gráficas interactivas con Canvas Tkinter y clasificación de gastos.
 - `v0.4.0`: tres temas persistentes, diálogos/ventanas premium y selector de fecha desplegable en todos los campos de fecha de la interfaz.
+- `v0.5.0`: calendario modal reconstruido como overlay dentro del formulario; exportación filtrada a PDF/XLSX/XML/TXT/CSV; estados de cuenta exportables; paquete completo de traslado `.gfbak` con hashes y restauración protegida; DPI nítido en Windows.
 
 La historia de Git contiene una instantánea de cada uno de esos paquetes.
 
@@ -55,11 +56,14 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 - Gráfica de líneas: hover para ver los valores exactos, click en un mes para filtrar tabla y distribución, click en leyenda para ocultar/mostrar serie.
 - Gráfica de anillo: click en una porción o categoría de leyenda para filtrar los movimientos del período.
 - Categorías de gasto integradas en el registro. Las bases anteriores reciben la columna `category` con valor por defecto `Otros` mediante migración aditiva.
-- Exportación CSV y copias de seguridad.
+- Exportación de búsquedas y estados de cuenta a PDF, XLSX, XML, TXT y CSV; los formatos de datos completos preservan observaciones.
+- Paquete portátil `.gfbak` con SQLite y evidencias verificadas por SHA-256, además de respaldo de reversión antes de restaurar.
 - Interfaz sin iconos decorativos ni textos promocionales; animaciones discretas y ligeras.
 - Temas Claro premium, Gris suave y Oscuro elegante, con preferencia persistente en `data/ui_preferences.json`.
 - Diálogos de confirmación/aviso y ventanas secundarias con encabezado premium, cierre y animación breve.
-- Calendarios desplegables en fecha de pago, inicio de cobro, vigencia de tarifa y filtros de búsqueda; el formato interno continúa siendo ISO `AAAA-MM-DD`.
+- Calendarios desplegables en fecha de pago, inicio de cobro, vigencia de tarifa y filtros de búsqueda; el calendario es un overlay dentro de la ventana modal y no crea otro `Toplevel`. El formato interno continúa siendo ISO `AAAA-MM-DD`.
+- Los diálogos premium cancelan sus tareas de animación al cerrarse y restauran la captura de foco de la ventana modal anterior.
+- En Windows se declara DPI awareness por monitor; la ventana usa la resolución nativa disponible, sin limitar el programa a 720p.
 - El puente NEXUS no es requisito para arrancar ni operar el programa.
 
 ## Invariantes financieros
@@ -72,8 +76,10 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 6. Una anulación debe preservar el movimiento y su motivo de anulación; no borrar registros financieros.
 7. Toda migración de base de datos debe ser aditiva, idempotente y respaldar la base antes de modificarla.
 
-## Limitaciones conocidas de v0.4.0
-- Las ventanas, temas y calendarios se probaron con una sesión gráfica virtual (Xvfb); todavía falta validar la apariencia final en la computadora Windows del usuario con su resolución y escala DPI.
+## Limitaciones conocidas de v0.5.0
+- La interfaz, los calendarios y los diálogos se probaron con una sesión gráfica virtual (Xvfb); todavía falta validar la apariencia final en la computadora Windows del usuario con su resolución y escala DPI.
+- El PDF es un resumen tabular de lectura: los textos largos se abrevian para conservar el ancho de página. Para conservar todas las observaciones y campos largos se debe usar XLSX, XML, TXT o CSV.
+- El XML es un formato de intercambio de reportes, no una copia integral restaurable de la base de datos. Para trasladar todo el programa entre equipos se debe utilizar el paquete `.gfbak`, que incluye base y evidencias.
 
 - No existe todavía edición directa de movimientos; el flujo actual es anular con motivo y volver a registrar.
 - El agente puede preparar y confirmar registros por texto; el dictado por voz depende de instalar el módulo opcional de Vosk.

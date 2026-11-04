@@ -22,6 +22,9 @@ class PremiumMessageDialog(tk.Toplevel):
         super().__init__(parent)
         self.result = False
         self.confirm_mode = confirm
+        self._previous_grab = None
+        self._destroying = False
+        self._fade_job = None
         self.palette = palette_for(parent)
         p = self.palette
         accent = p["expense"] if kind == "error" else p["accent"]
@@ -59,8 +62,49 @@ class PremiumMessageDialog(tk.Toplevel):
         self.bind("<Return>", lambda _e: self._confirm())
         self.protocol("WM_DELETE_WINDOW", self._close)
         self._place(parent)
+        self._capture_previous_grab(parent)
         self.grab_set()
-        self.after(10, self._fade_in)
+        self._fade_job = self.after(10, self._fade_in)
+
+    def _capture_previous_grab(self, parent):
+        try:
+            owner = parent.winfo_toplevel() if parent is not None else self.master
+            previous = owner.grab_current() if owner is not None else None
+            if previous is not None and previous is not self:
+                previous.grab_release()
+                self._previous_grab = previous
+        except tk.TclError:
+            self._previous_grab = None
+
+    def destroy(self):
+        if self._destroying:
+            return
+        self._destroying = True
+        previous = self._previous_grab
+        self._previous_grab = None
+        self._cancel_fade()
+        try:
+            try:
+                self.grab_release()
+            except tk.TclError:
+                pass
+            super().destroy()
+        finally:
+            if previous is not None:
+                try:
+                    if previous.winfo_exists():
+                        previous.grab_set()
+                        previous.focus_set()
+                except tk.TclError:
+                    pass
+
+    def _cancel_fade(self):
+        job, self._fade_job = self._fade_job, None
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
 
     def _button(self, parent, text, command, primary=False):
         p = self.palette
@@ -95,7 +139,9 @@ class PremiumMessageDialog(tk.Toplevel):
         except tk.TclError:
             return
         if step < 7 and self.winfo_exists():
-            self.after(16, lambda: self._fade_in(step + 1))
+            self._fade_job = self.after(16, lambda: self._fade_in(step + 1))
+        else:
+            self._fade_job = None
 
     def _confirm(self):
         self.result = True
@@ -118,6 +164,9 @@ class PremiumWindow(tk.Toplevel):
         self.palette = self.theme_manager.palette if self.theme_manager else palette_for(parent)
         self.modal = modal
         self._drag_offset = (0, 0)
+        self._previous_grab = None
+        self._destroying = False
+        self._fade_job = None
         p = self.palette
 
         self.overrideredirect(True)
@@ -163,8 +212,51 @@ class PremiumWindow(tk.Toplevel):
         except tk.TclError:
             pass
         if modal:
+            self._capture_previous_grab(owner)
             self.grab_set()
-        self.after(10, self._fade_in)
+        self._fade_job = self.after(10, self._fade_in)
+
+    def _capture_previous_grab(self, owner):
+        if owner is None:
+            return
+        try:
+            previous = owner.grab_current()
+            if previous is not None and previous is not self:
+                previous.grab_release()
+                self._previous_grab = previous
+        except tk.TclError:
+            self._previous_grab = None
+
+    def destroy(self):
+        if self._destroying:
+            return
+        self._destroying = True
+        previous = self._previous_grab
+        self._previous_grab = None
+        self._cancel_fade()
+        try:
+            if self.modal:
+                try:
+                    self.grab_release()
+                except tk.TclError:
+                    pass
+            super().destroy()
+        finally:
+            if previous is not None:
+                try:
+                    if previous.winfo_exists():
+                        previous.grab_set()
+                        previous.focus_set()
+                except tk.TclError:
+                    pass
+
+    def _cancel_fade(self):
+        job, self._fade_job = self._fade_job, None
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
 
     def _set_geometry(self, parent, geometry):
         self.update_idletasks()
@@ -196,7 +288,9 @@ class PremiumWindow(tk.Toplevel):
         except tk.TclError:
             return
         if step < 7 and self.winfo_exists():
-            self.after(16, lambda: self._fade_in(step + 1))
+            self._fade_job = self.after(16, lambda: self._fade_in(step + 1))
+        else:
+            self._fade_job = None
 
 
 def _show(parent, title, message, kind="info", confirm=False):

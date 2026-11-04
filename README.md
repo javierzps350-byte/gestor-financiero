@@ -1,6 +1,6 @@
 # Gestor Financiero
 
-**Versión 0.4.0** — incorpora tres temas visuales, ventanas emergentes premium y calendarios desplegables en los campos de fecha, además del panel interactivo y el agente financiero local.
+**Versión 0.5.0** — corrige el calendario en formularios modales, añade exportación filtrada a PDF/Excel/XML/TXT/CSV y paquetes completos de traslado `.gfbak`, además de los temas visuales y el panel interactivo.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
@@ -31,8 +31,11 @@ Aplicación de escritorio local para Windows, construida con Python, Tkinter y S
 - Evidencias múltiples por movimiento; los archivos se copian al almacenamiento interno de la aplicación.
 - Selección manual de archivos recientes de Descargas (últimos 7 días), sin adjuntar automáticamente un archivo ambiguo.
 - Búsqueda por persona, motivo, voucher y rango de fechas.
-- Exportación CSV compatible con Excel.
-- Copias de seguridad de la base SQLite.
+- Exportación de resultados filtrados a PDF, Excel `.xlsx`, XML, TXT y CSV: se respetan las fechas, cliente, voucher, categoría y demás criterios de búsqueda.
+- Los reportes de ingresos/gastos contienen persona, cliente asociado, motivo, categoría, importe, método, voucher, evidencias, estado y observaciones.
+- Los estados de cuenta de mensualidades se pueden exportar por cliente o para todos los clientes a una fecha de corte.
+- PDF paginado para lectura; Excel, XML, TXT y CSV preservan campos largos y observaciones completas. Los libros Excel incorporan filtros, encabezados y formato de impresión horizontal.
+- Paquete de traslado `.gfbak` con base SQLite y evidencias. El paquete valida SHA-256 y estructura de base de datos; al restaurar genera primero una copia de reversión del equipo actual.
 - Anulación controlada de movimientos, conservando el registro de auditoría.
 - Recalcula las mensualidades cuando se registra un pago atrasado o se anula uno anterior, respetando la fecha real de cada pago.
 - Consultas históricas que excluyen pagos cuya fecha sea posterior a la fecha consultada.
@@ -46,6 +49,20 @@ Aplicación de escritorio local para Windows, construida con Python, Tkinter y S
 - Motor de interpretación determinista: no necesita LLM, Internet, GPU ni paquetes adicionales.
 - Reconocimiento de voz opcional, bajo demanda, conectado al mismo agente.
 - Puente opcional con NEXUS, aislado y desactivado por defecto.
+
+## Exportar reportes y trasladar la información a otro equipo
+
+En el apartado de búsqueda, aplica los filtros que necesites (rango de fechas, mes/año, cliente, categoría, voucher o texto) y pulsa **Exportar resultados**. El archivo contiene exactamente los movimientos que se muestran tras la búsqueda.
+
+- **PDF:** reporte paginado para consulta e impresión. Los textos de observaciones muy largos pueden abreviarse en la tabla.
+- **Excel (`.xlsx`), XML, TXT y CSV:** conservan los campos y observaciones completos; Excel permite filtrar y ordenar la tabla.
+- **Deudas:** desde Mensualidades se puede exportar el estado de un cliente o el de todos a una fecha de corte.
+
+Para mover toda la información a otra computadora, usa **Datos → Crear paquete para trasladar…**. El paquete `.gfbak` contiene la base SQLite y las evidencias adjuntas, verifica sus hashes al restaurarse y conserva una copia de reversión del equipo receptor antes de reemplazar sus datos. Copia ese paquete al nuevo equipo y usa **Datos → Restaurar paquete en este equipo…**. El XML es un formato de reporte y no sustituye este paquete integral.
+
+## Calendario y resolución de pantalla
+
+El selector de fecha aparece dentro del formulario modal, sin abrir otra ventana nativa ni interferir con el foco del formulario. En Windows se habilita DPI awareness por monitor para que la interfaz se represente con la nitidez correspondiente a la resolución y escala del monitor.
 
 ## Actualizar desde versiones anteriores sin perder datos
 
@@ -89,7 +106,7 @@ El resultado estará en `dist/GestorFinanciero/`. Para generar el instalador Set
 
 La versión empaquetada guarda los datos de usuario en `%LOCALAPPDATA%\GestorFinanciero`, fuera de los archivos de la aplicación, para conservarlos al actualizar.
 
-## Novedades de 0.4.0
+## Temas y ventanas incorporados en 0.4.0
 
 - Tres apariencias seleccionables: **Claro premium**, **Gris suave** y **Oscuro elegante**. La selección se guarda y se restaura al volver a abrir la aplicación.
 - Los temas se aplican a navegación, tarjetas, gráficas, tablas, formularios, ventanas emergentes y al asistente.

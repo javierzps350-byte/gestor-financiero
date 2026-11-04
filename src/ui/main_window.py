@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import calendar
 import tkinter as tk
 from datetime import date
 from pathlib import Path
@@ -18,7 +19,8 @@ from src.services.finance_service import (
     void_movement,
 )
 from src.services.evidence_service import evidence_absolute_path
-from src.services.report_service import export_debts_csv, export_movements_csv
+from src.services.report_service import export_report, build_movement_report, build_debt_report
+from src.services.backup_service import create_portable_backup, restore_portable_backup
 from src.ui.dialogs import ClientDialog, MovementDialog, RateDialog
 from src.ui.theme_manager import ThemeManager, THEMES
 from src.ui.premium import messagebox, palette_for, PremiumWindow
@@ -62,10 +64,17 @@ class MainWindow:
         root.title(APP_NAME)
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
-        window_width = min(1440, max(960, screen_width - 40))
-        window_height = min(920, max(680, screen_height - 60))
-        root.geometry(f"{window_width}x{window_height}+20+15")
-        root.minsize(min(940, window_width), min(660, window_height))
+        # Use the real monitor pixel dimensions (main.py enables per-monitor
+        # DPI awareness on Windows). The window grows on large screens while
+        # remaining usable on compact office monitors; no 720p render target.
+        window_width = min(1680, max(1040, screen_width - 48))
+        window_height = min(1000, max(660, screen_height - 72))
+        window_width = min(window_width, screen_width - 16)
+        window_height = min(window_height, screen_height - 32)
+        x = max(0, (screen_width - window_width) // 2)
+        y = max(0, (screen_height - window_height) // 2)
+        root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        root.minsize(min(980, window_width), min(620, window_height))
         root.configure(bg=self.theme_manager.palette["bg"])
         self._configure_style()
         self._build_shell()
@@ -78,6 +87,9 @@ class MainWindow:
         charts = (self.dashboard.line_chart, self.dashboard.donut_chart) if hasattr(self, "dashboard") else ()
         self.theme_manager.apply(self.root, charts=charts)
         p = self.theme_manager.palette
+        if hasattr(self, "data_button"):
+            self.data_button.configure(bg=p["panel"], fg=p["text"], activebackground=p["selected"], activeforeground=p["text"])
+            self.data_menu.configure(bg=p["panel"], fg=p["text"], activebackground=p["selected"], activeforeground=p["text"])
         if hasattr(self, "dashboard"):
             self.dashboard.apply_theme(p)
             self.dashboard.recent_tree.tag_configure("income", foreground=p["success"])
@@ -105,6 +117,59 @@ class MainWindow:
         self.theme_manager.set_theme(theme_id)
         self.apply_theme()
 
+    def export_portable_backup(self):
+        stamp = date.today().strftime("%Y%m%d")
+        destination = filedialog.asksaveasfilename(
+            parent=self.root, title="Crear paquete completo para trasladar",
+            initialfile=f"GestorFinanciero_respaldo_{stamp}.gfbak",
+            defaultextension=".gfbak",
+            filetypes=[("Paquete de traslado Gestor Financiero", "*.gfbak")],
+        )
+        if not destination:
+            return
+        try:
+            path = create_portable_backup(destination)
+            messagebox.showinfo(
+                "Paquete creado",
+                "El paquete incluye la base de datos, clientes, movimientos, mensualidades y evidencias.\n\n"
+                f"Archivo: {path}", parent=self.root,
+            )
+        except Exception as exc:
+            messagebox.showerror("No se pudo crear el paquete", str(exc), parent=self.root)
+
+    def import_portable_backup(self):
+        source = filedialog.askopenfilename(
+            parent=self.root, title="Seleccionar paquete de traslado",
+            filetypes=[("Paquete Gestor Financiero", "*.gfbak"), ("Todos los archivos", "*.*")],
+        )
+        if not source:
+            return
+        try:
+            from src.services.backup_service import inspect_portable_backup
+            manifest = inspect_portable_backup(source)
+            evidence_count = int(manifest.get("evidence_count", 0))
+            created = manifest.get("created_at", "fecha desconocida")
+            proceed = messagebox.askyesno(
+                "Confirmar restauración",
+                "Se reemplazarán los datos actuales por los del paquete seleccionado.\n\n"
+                f"Respaldo creado: {created}\nEvidencias: {evidence_count}\n\n"
+                "Antes de restaurar se guardará automáticamente una copia del estado actual.\n"
+                "¿Deseas continuar?",
+                parent=self.root,
+            )
+            if not proceed:
+                return
+            result = restore_portable_backup(source)
+            self.refresh_all()
+            messagebox.showinfo(
+                "Restauración terminada",
+                "Los datos y evidencias se restauraron correctamente.\n\n"
+                f"Copia anterior: {result.get('rollback_backup') or 'No había una base previa'}",
+                parent=self.root,
+            )
+        except Exception as exc:
+            messagebox.showerror("No se pudo restaurar el paquete", str(exc), parent=self.root)
+
     def _build_shell(self):
         top = tk.Frame(self.root, bg=WHITE, height=66, padx=28)
         top.pack(fill="x")
@@ -112,6 +177,17 @@ class MainWindow:
         tk.Label(top, text="Gestor Financiero", bg=WHITE, fg=TEXT, font=("Segoe UI", 16, "bold")).pack(side="left", anchor="center")
         theme_area = tk.Frame(top, bg=WHITE)
         theme_area.pack(side="right", anchor="center")
+        self.data_button = tk.Menubutton(
+            theme_area, text="Datos", bg=WHITE, fg=TEXT,
+            activebackground="#EAF5F3", activeforeground=TEXT,
+            relief="flat", bd=0, highlightthickness=0,
+            font=("Segoe UI", 9, "bold"), padx=12, pady=8, cursor="hand2",
+        )
+        self.data_menu = tk.Menu(self.data_button, tearoff=False)
+        self.data_menu.add_command(label="Crear paquete para trasladar…", command=self.export_portable_backup)
+        self.data_menu.add_command(label="Restaurar paquete en este equipo…", command=self.import_portable_backup)
+        self.data_button.configure(menu=self.data_menu)
+        self.data_button.pack(side="left", padx=(0, 14))
         ttk.Label(theme_area, text="Apariencia", style="Toolbar.TLabel").pack(side="left", padx=(0, 9))
         self.theme_labels = {data["label"]: key for key, data in THEMES.items()}
         self.theme_var = tk.StringVar(value=THEMES[self.theme_manager.theme_id]["label"])
@@ -239,6 +315,9 @@ class MainWindow:
 
     def refresh_all(self):
         self.dashboard.refresh()
+        self.incomes.refresh_filter_options()
+        self.expenses.refresh_filter_options()
+        self.search.refresh_filter_options()
         self.incomes.refresh()
         self.expenses.refresh()
         self.clients.refresh()
@@ -508,10 +587,20 @@ class DashboardView(ttk.Frame):
 
 
 class MovementView(ttk.Frame):
+    MONTHS = (
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    )
+    CATEGORIES = (
+        "Ingresos", "Hogar", "Comida", "Transporte", "Entretenimiento",
+        "Salud", "Educación", "Servicios", "Compras", "Negocio", "Otros",
+    )
+
     def __init__(self, parent, direction: str, title: str):
         super().__init__(parent, padding=18)
         self.direction = direction
         self.title = title
+        self.last_rows = []
         top = ttk.Frame(self)
         top.pack(fill="x")
         ttk.Label(top, text=title, style="Title.TLabel").pack(side="left")
@@ -519,26 +608,61 @@ class MovementView(ttk.Frame):
         if add_label:
             ttk.Button(top, text=add_label, style="Accent.TButton", command=self.new_movement).pack(side="right")
 
+        clients = list_clients(active_only=False)
+        self.client_map = {"Todos los clientes": None}
+        self.client_map.update({f'{c["id"]} — {c["name"]}': int(c["id"]) for c in clients})
+        with connect() as connection:
+            years = [str(row[0]) for row in connection.execute(
+                "SELECT DISTINCT substr(payment_date,1,4) FROM movements ORDER BY 1 DESC"
+            ).fetchall() if row[0]]
+        year_values = sorted(set(years + [str(date.today().year)]), reverse=True)
+
         filters = ttk.Frame(self)
-        filters.pack(fill="x", pady=(14, 12))
+        filters.pack(fill="x", pady=(14, 5))
         self.query_var = tk.StringVar()
         self.from_var = tk.StringVar()
         self.to_var = tk.StringVar()
         self.voucher_var = tk.StringVar()
-        ttk.Label(filters, text="Buscar").grid(row=0, column=0, sticky="w")
-        ttk.Entry(filters, textvariable=self.query_var, width=29).grid(row=1, column=0, padx=(0, 9), sticky="ew")
-        ttk.Label(filters, text="Desde").grid(row=0, column=1, sticky="w")
-        DatePickerEntry(filters, textvariable=self.from_var, width=12).grid(row=1, column=1, padx=(0, 9), sticky="ew")
-        ttk.Label(filters, text="Hasta").grid(row=0, column=2, sticky="w")
-        DatePickerEntry(filters, textvariable=self.to_var, width=12).grid(row=1, column=2, padx=(0, 9), sticky="ew")
-        ttk.Label(filters, text="N.º voucher").grid(row=0, column=3, sticky="w")
-        ttk.Entry(filters, textvariable=self.voucher_var, width=17).grid(row=1, column=3, padx=(0, 9), sticky="ew")
-        ttk.Button(filters, text="Buscar", command=self.refresh).grid(row=1, column=4, padx=(0, 7))
-        ttk.Button(filters, text="Limpiar", command=self.clear_filters).grid(row=1, column=5)
-        filters.columnconfigure(0, weight=1)
+        self.client_var = tk.StringVar(value="Todos los clientes")
+        self.category_var = tk.StringVar(value="Todas las categorías")
+        self.month_var = tk.StringVar(value="Todos los meses")
+        self.year_var = tk.StringVar(value="Todos los años")
+
+        row1 = ttk.Frame(filters)
+        row1.pack(fill="x", pady=(0, 8))
+        ttk.Label(row1, text="Buscar texto").grid(row=0, column=0, sticky="w")
+        ttk.Entry(row1, textvariable=self.query_var, width=26).grid(row=1, column=0, padx=(0, 9), sticky="ew")
+        ttk.Label(row1, text="Cliente").grid(row=0, column=1, sticky="w")
+        self.client_box = ttk.Combobox(row1, textvariable=self.client_var, values=list(self.client_map), state="readonly", width=25)
+        self.client_box.grid(row=1, column=1, padx=(0, 9), sticky="ew")
+        ttk.Label(row1, text="Categoría").grid(row=0, column=2, sticky="w")
+        category_values = ["Todas las categorías"] + list(self.CATEGORIES)
+        self.category_box = ttk.Combobox(row1, textvariable=self.category_var, values=category_values, state="readonly", width=19)
+        self.category_box.grid(row=1, column=2, padx=(0, 9), sticky="ew")
+        ttk.Label(row1, text="N.º voucher").grid(row=0, column=3, sticky="w")
+        ttk.Entry(row1, textvariable=self.voucher_var, width=17).grid(row=1, column=3, sticky="ew")
+        row1.columnconfigure(0, weight=2)
+        row1.columnconfigure(1, weight=2)
+        row1.columnconfigure(2, weight=1)
+
+        row2 = ttk.Frame(filters)
+        row2.pack(fill="x")
+        ttk.Label(row2, text="Desde").grid(row=0, column=0, sticky="w")
+        DatePickerEntry(row2, textvariable=self.from_var, width=12).grid(row=1, column=0, padx=(0, 8), sticky="ew")
+        ttk.Label(row2, text="Hasta").grid(row=0, column=1, sticky="w")
+        DatePickerEntry(row2, textvariable=self.to_var, width=12).grid(row=1, column=1, padx=(0, 8), sticky="ew")
+        ttk.Label(row2, text="Mes rápido").grid(row=0, column=2, sticky="w")
+        month_values = ["Todos los meses"] + [f"{i:02d} - {name}" for i, name in enumerate(self.MONTHS, 1)]
+        self.month_box = ttk.Combobox(row2, textvariable=self.month_var, values=month_values, state="readonly", width=17)
+        self.month_box.grid(row=1, column=2, padx=(0, 8), sticky="ew")
+        ttk.Label(row2, text="Año").grid(row=0, column=3, sticky="w")
+        self.year_box = ttk.Combobox(row2, textvariable=self.year_var, values=["Todos los años"] + year_values, state="readonly", width=13)
+        self.year_box.grid(row=1, column=3, padx=(0, 8), sticky="ew")
+        ttk.Button(row2, text="Buscar", style="Accent.TButton", command=self.refresh).grid(row=1, column=4, padx=(0, 7))
+        ttk.Button(row2, text="Limpiar", command=self.clear_filters).grid(row=1, column=5)
 
         table_frame = ttk.Frame(self)
-        table_frame.pack(fill="both", expand=True)
+        table_frame.pack(fill="both", expand=True, pady=(10, 0))
         columns = ("date", "registered", "type", "person", "reason", "category", "amount", "method", "voucher", "evidence", "status")
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
         headings = {
@@ -564,31 +688,100 @@ class MovementView(ttk.Frame):
         actions.pack(fill="x", pady=(12, 0))
         ttk.Button(actions, text="Abrir evidencia", command=self.open_evidence).pack(side="left")
         ttk.Button(actions, text="Anular movimiento…", command=self.void_selected).pack(side="left", padx=8)
-        ttk.Button(actions, text="Exportar CSV", command=self.export).pack(side="right")
+        ttk.Button(actions, text="Exportar resultados…", style="Accent.TButton", command=self.export).pack(side="right")
         ttk.Button(actions, text="Actualizar", command=self.refresh).pack(side="right", padx=8)
         self.refresh()
 
+    def refresh_filter_options(self):
+        selected = self.client_var.get()
+        clients = list_clients(active_only=False)
+        self.client_map = {"Todos los clientes": None}
+        self.client_map.update({f'{c["id"]} — {c["name"]}': int(c["id"]) for c in clients})
+        self.client_box.configure(values=list(self.client_map))
+        self.client_var.set(selected if selected in self.client_map else "Todos los clientes")
+        with connect() as connection:
+            years = [str(row[0]) for row in connection.execute(
+                "SELECT DISTINCT substr(payment_date,1,4) FROM movements ORDER BY 1 DESC"
+            ).fetchall() if row[0]]
+        years = sorted(set(years + [str(date.today().year)]), reverse=True)
+        self.year_box.configure(values=["Todos los años"] + years)
+        if self.year_var.get() not in ("Todos los años", *years):
+            self.year_var.set("Todos los años")
+
     def new_movement(self):
         MovementDialog(self, self.direction, self.refresh)
+
+    def _period_bounds(self):
+        """Return a quick month/year interval, intersected with manual dates."""
+        start = self.from_var.get().strip()
+        end = self.to_var.get().strip()
+        year_text = self.year_var.get()
+        month_text = self.month_var.get()
+        selected_year = int(year_text) if year_text != "Todos los años" else date.today().year
+        if month_text != "Todos los meses":
+            month = int(month_text.split(" - ", 1)[0])
+            period_start = date(selected_year, month, 1)
+            period_end = date(selected_year, month, calendar.monthrange(selected_year, month)[1])
+            start = max(start, period_start.isoformat()) if start else period_start.isoformat()
+            end = min(end, period_end.isoformat()) if end else period_end.isoformat()
+        elif year_text != "Todos los años":
+            period_start = date(selected_year, 1, 1).isoformat()
+            period_end = date(selected_year, 12, 31).isoformat()
+            start = max(start, period_start) if start else period_start
+            end = min(end, period_end) if end else period_end
+        if start and end and start > end:
+            raise ValueError("El intervalo de fechas está vacío. Revisa los filtros Desde, Hasta, Mes y Año.")
+        return start, end
+
+    def _active_filters(self):
+        date_from, date_to = self._period_bounds()
+        selected_client = self.client_var.get()
+        selected_category = self.category_var.get()
+        return {
+            "query": self.query_var.get().strip(),
+            "direction": self.direction,
+            "date_from": date_from,
+            "date_to": date_to,
+            "voucher": self.voucher_var.get().strip(),
+            "client_id": self.client_map.get(selected_client),
+            "category": "" if selected_category == "Todas las categorías" else selected_category,
+            "include_void": True,
+            "limit": 250000,
+        }
+
+    def _filter_description(self):
+        filters = self._active_filters()
+        client_label = self.client_var.get()
+        category_label = self.category_var.get()
+        return {
+            "búsqueda": filters["query"] or "Todas",
+            "tipo": self.title,
+            "cliente": client_label,
+            "categoría": category_label,
+            "voucher": filters["voucher"] or "Todos",
+            "desde": filters["date_from"] or "Sin límite",
+            "hasta": filters["date_to"] or "Sin límite",
+        }
 
     def clear_filters(self):
         self.query_var.set("")
         self.from_var.set("")
         self.to_var.set("")
         self.voucher_var.set("")
+        self.client_var.set("Todos los clientes")
+        self.category_var.set("Todas las categorías")
+        self.month_var.set("Todos los meses")
+        self.year_var.set("Todos los años")
         self.refresh()
 
     def refresh(self):
         try:
-            rows = search_movements(
-                query=self.query_var.get(), direction=self.direction,
-                date_from=self.from_var.get(), date_to=self.to_var.get(),
-                voucher=self.voucher_var.get(), include_void=True,
-            )
+            filters = self._active_filters()
+            rows = search_movements(**filters)
+            self.last_rows = rows
             self.tree.delete(*self.tree.get_children())
             for row in rows:
                 state = "Anulado" if row["status"] == "void" else "Vigente"
-                amount_prefix = "Ingreso" if row["direction"] == "income" else "Gasto"
                 self.tree.insert("", "end", iid=str(row["id"]), values=(
                     row["payment_date"], row["registered_at"],
                     "Ingreso" if row["direction"] == "income" else "Gasto",
@@ -673,14 +866,27 @@ class MovementView(ttk.Frame):
         ttk.Button(frame, text="Anular movimiento", style="Accent.TButton", command=confirm).pack(anchor="e", pady=(8, 0))
 
     def export(self):
-        path = filedialog.asksaveasfilename(parent=self, title="Exportar movimientos", defaultextension=".csv", initialfile="movimientos.csv", filetypes=[("CSV compatible con Excel", "*.csv")])
+        if not self.last_rows:
+            if not messagebox.askyesno("Exportar sin resultados", "La búsqueda actual no tiene movimientos. ¿Deseas generar un archivo vacío con los filtros aplicados?", parent=self):
+                return
+        extension_types = [
+            ("PDF", "*.pdf"), ("Libro de Excel", "*.xlsx"),
+            ("XML de datos", "*.xml"), ("Texto", "*.txt"),
+            ("CSV compatible con Excel", "*.csv"),
+        ]
+        stamp = date.today().strftime("%Y%m%d")
+        base_name = "ingresos" if self.direction == "income" else "gastos" if self.direction == "expense" else "movimientos"
+        path = filedialog.asksaveasfilename(
+            parent=self, title="Exportar resultados de la búsqueda",
+            initialfile=f"{base_name}_{stamp}.pdf", defaultextension=".pdf",
+            filetypes=extension_types,
+        )
         if not path:
             return
         try:
-            count = export_movements_csv(path, query=self.query_var.get(), direction=self.direction,
-                                         date_from=self.from_var.get(), date_to=self.to_var.get(),
-                                         voucher=self.voucher_var.get())
-            messagebox.showinfo("Exportación terminada", f"Se exportaron {count} movimientos.\n\n{path}", parent=self)
+            report = build_movement_report(self.last_rows, self._filter_description(), self.title)
+            count = export_report(path, report)
+            messagebox.showinfo("Exportación terminada", f"Se exportaron {count} movimientos.\n\nArchivo: {path}", parent=self)
         except Exception as exc:
             messagebox.showerror("Error al exportar", str(exc), parent=self)
 
@@ -756,16 +962,20 @@ class DebtView(ttk.Frame):
         top = ttk.Frame(self)
         top.pack(fill="x")
         ttk.Label(top, text="Mensualidades y deudas", style="Title.TLabel").pack(side="left")
-        ttk.Button(top, text="Exportar estado de cuentas", command=self.export).pack(side="right")
+        ttk.Button(top, text="Exportar todos", command=self.export_all).pack(side="right")
+        ttk.Button(top, text="Exportar cliente", style="Accent.TButton", command=self.export_client).pack(side="right", padx=8)
         ttk.Button(top, text="Historial de pagos", command=self.open_payment_history).pack(side="right", padx=(0, 8))
         selectors = ttk.Frame(self)
         selectors.pack(fill="x", pady=(14, 12))
         ttk.Label(selectors, text="Cliente").pack(side="left")
         self.client_var = tk.StringVar()
-        self.client_box = ttk.Combobox(selectors, textvariable=self.client_var, state="readonly", width=42)
+        self.client_box = ttk.Combobox(selectors, textvariable=self.client_var, state="readonly", width=34)
         self.client_box.pack(side="left", padx=9)
         self.client_box.bind("<<ComboboxSelected>>", lambda _e: self.refresh())
-        ttk.Button(selectors, text="Actualizar cuotas", command=self.refresh).pack(side="left")
+        ttk.Label(selectors, text="Fecha de corte").pack(side="left", padx=(10, 4))
+        self.as_of_var = tk.StringVar(value=date.today().isoformat())
+        DatePickerEntry(selectors, textvariable=self.as_of_var, width=12).pack(side="left")
+        ttk.Button(selectors, text="Actualizar cuotas", command=self.refresh).pack(side="left", padx=9)
         self.client_map = {}
         self.summary_frame = ttk.Frame(self)
         self.summary_frame.pack(fill="x", pady=(0, 12))
@@ -822,7 +1032,8 @@ class DebtView(ttk.Frame):
             return
         client_id = int(client["id"])
         try:
-            summary = client_debt_summary(client_id)
+            as_of = self.as_of_var.get().strip() or date.today().isoformat()
+            summary = client_debt_summary(client_id, as_of)
             self._last_summary = summary
             self.summary_labels["received"].configure(text=format_money(summary["total_received_cents"]))
             self.summary_labels["paid"].configure(text=str(summary["fully_paid_months"]))
@@ -830,8 +1041,7 @@ class DebtView(ttk.Frame):
             self.summary_labels["overdue"].configure(text=format_money(summary["overdue_cents"]), fg=palette["danger"] if summary["overdue_cents"] else palette["text"])
             self.summary_labels["pending"].configure(text=format_money(summary["pending_cents"]))
             self.summary_labels["advance"].configure(text=format_money(summary["future_applied_cents"]))
-            charges = list_client_charges(client_id)
-            today = date.today().isoformat()
+            charges = list_client_charges(client_id, as_of)
             for item in charges:
                 due = int(item["amount_due_cents"])
                 applied = int(item["applied_cents"])
@@ -840,7 +1050,7 @@ class DebtView(ttk.Frame):
                     status, tag = "Cubierto", "paid"
                 elif applied > 0:
                     status, tag = "Abonado", "partial"
-                elif item["due_date"] < today:
+                elif item["due_date"] < as_of:
                     status, tag = "Vencido", "late"
                 else:
                     status, tag = "Pendiente", ""
@@ -859,18 +1069,13 @@ class DebtView(ttk.Frame):
             return
 
         client_id = int(client["id"])
-        rows = client_payment_history(client_id)
+        as_of = self.as_of_var.get().strip() or date.today().isoformat()
+        rows = client_payment_history(client_id, as_of)
         dialog = PremiumWindow(self, f"Historial de pagos · {client['name']}", "1120x520")
         frame = ttk.Frame(dialog.body, padding=4)
         frame.pack(fill="both", expand=True)
-
         ttk.Label(frame, text=f"Historial de pagos · {client['name']}", style="DialogTitle.TLabel").pack(anchor="w")
-        ttk.Label(
-            frame,
-            text="El importe recibido se muestra por separado del valor aplicado a mensualidades.",
-            style="Hint.TLabel",
-        ).pack(anchor="w", pady=(4, 12))
-
+        ttk.Label(frame, text=f"Fecha de corte: {as_of}. El importe recibido se muestra por separado del valor aplicado a mensualidades.", style="Hint.TLabel").pack(anchor="w", pady=(4, 12))
         columns = ("date", "registered", "amount", "applied", "unapplied", "method", "voucher", "evidence", "status", "reason")
         tree = ttk.Treeview(frame, columns=columns, show="headings", selectmode="browse")
         definitions = [
@@ -885,7 +1090,6 @@ class DebtView(ttk.Frame):
             tree.column(key_name, width=width, minwidth=65, anchor="w" if key_name == "reason" else "center")
         tree.pack(fill="both", expand=True)
         tree.tag_configure("void", foreground=palette_for(dialog)["muted"])
-
         total_received = 0
         total_applied = 0
         for row in rows:
@@ -894,35 +1098,50 @@ class DebtView(ttk.Frame):
             applied = int(row["allocated_cents"]) if not is_void else 0
             total_received += received if not is_void else 0
             total_applied += applied
-            tree.insert(
-                "", "end", iid=str(row["id"]),
-                values=(
-                    row["payment_date"], row["registered_at"], format_money(received),
-                    format_money(applied), format_money(max(0, received - applied)),
-                    row["payment_method"], row["voucher_number"] or "—",
-                    row["evidence_count"], "Anulado" if is_void else "Vigente", row["reason"],
-                ),
-                tags=("void",) if is_void else (),
-            )
-
+            tree.insert("", "end", iid=str(row["id"]), values=(
+                row["payment_date"], row["registered_at"], format_money(received),
+                format_money(applied), format_money(max(0, received - applied)),
+                row["payment_method"], row["voucher_number"] or "—",
+                row["evidence_count"], "Anulado" if is_void else "Vigente", row["reason"],
+            ), tags=("void",) if is_void else ())
         footer = ttk.Frame(frame)
         footer.pack(fill="x", pady=(12, 0))
-        ttk.Label(
-            footer,
-            text=f"Total recibido vigente: {format_money(total_received)}    ·    Aplicado a mensualidades: {format_money(total_applied)}",
-            style="SubTitle.TLabel",
-        ).pack(side="left")
+        ttk.Label(footer, text=f"Total recibido vigente: {format_money(total_received)}    ·    Aplicado a mensualidades: {format_money(total_applied)}", style="SubTitle.TLabel").pack(side="left")
         ttk.Button(footer, text="Cerrar", command=dialog.destroy).pack(side="right")
 
-    def export(self):
-        path = filedialog.asksaveasfilename(parent=self, title="Exportar estados de cuenta", defaultextension=".csv", initialfile="estados_de_cuenta.csv", filetypes=[("CSV compatible con Excel", "*.csv")])
+    def _export_report(self, report, default_name):
+        filetypes = [
+            ("PDF", "*.pdf"), ("Libro de Excel", "*.xlsx"),
+            ("XML de datos", "*.xml"), ("Texto", "*.txt"),
+            ("CSV compatible con Excel", "*.csv"),
+        ]
+        path = filedialog.asksaveasfilename(
+            parent=self, title="Exportar estado de cuenta", initialfile=default_name,
+            defaultextension=".pdf", filetypes=filetypes,
+        )
         if not path:
             return
         try:
-            count = export_debts_csv(path)
-            messagebox.showinfo("Exportación terminada", f"Se exportaron {count} clientes.\n\n{path}", parent=self)
+            export_report(path, report)
+            count = len(report.get("records", []))
+            messagebox.showinfo("Exportación terminada", f"Se exportó el estado de cuenta.\nDetalle de períodos: {count}.\n\n{path}", parent=self)
         except Exception as exc:
             messagebox.showerror("Error al exportar", str(exc), parent=self)
+
+    def export_client(self):
+        key = self.client_var.get()
+        client = self.client_map.get(key)
+        if not client:
+            messagebox.showwarning("Selecciona un cliente", "Selecciona el cliente cuyo estado deseas exportar.", parent=self)
+            return
+        as_of = self.as_of_var.get().strip() or date.today().isoformat()
+        report = build_debt_report(as_of, int(client["id"]))
+        self._export_report(report, f"estado_cuenta_{client['id']}_{as_of}.pdf")
+
+    def export_all(self):
+        as_of = self.as_of_var.get().strip() or date.today().isoformat()
+        report = build_debt_report(as_of)
+        self._export_report(report, f"estados_de_cuenta_{as_of}.pdf")
 
 
 def run_app():

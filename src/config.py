@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Gestor Financiero"
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 
 if getattr(sys, "frozen", False):
     # Los recursos del programa van en el paquete; los datos del usuario quedan

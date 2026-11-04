@@ -347,8 +347,10 @@ def search_movements(
     date_from: str = "",
     date_to: str = "",
     voucher: str = "",
+    client_id: int | None = None,
+    category: str = "",
     include_void: bool = False,
-    limit: int = 2000,
+    limit: int = 100000,
 ) -> list[dict[str, Any]]:
     clauses = []
     params: list[Any] = []
@@ -364,6 +366,12 @@ def search_movements(
     if voucher.strip():
         clauses.append("m.voucher_number LIKE ?")
         params.append(f"%{voucher.strip()}%")
+    if client_id is not None:
+        clauses.append("m.client_id=?")
+        params.append(int(client_id))
+    if category.strip():
+        clauses.append("m.category=?")
+        params.append(category.strip())
     if date_from.strip():
         parse_iso_date(date_from)
         clauses.append("m.payment_date>=?")
@@ -376,7 +384,7 @@ def search_movements(
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY m.payment_date DESC, m.id DESC LIMIT ?"
-    params.append(limit)
+    params.append(max(1, min(int(limit), 250000)))
     with get_connection() as connection:
         return [dict(row) for row in connection.execute(sql, params).fetchall()]
 

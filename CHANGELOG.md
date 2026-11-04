@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## [0.5.0] — Calendario modal, reportes y traslado completo
+- Se corrigió el calendario desplegable para que se dibuje dentro del formulario modal sin crear otra ventana ni alterar la captura de foco de Tkinter. La selección devuelve el foco al campo de fecha.
+- Se reforzó el manejo de ventanas premium anidadas y la restauración del foco de la ventana anterior.
+- Las animaciones de entrada de calendarios y diálogos cancelan sus tareas `after()` al cerrar, evitando callbacks pendientes cuando la ventana ya fue destruida.
+- Las búsquedas filtradas de movimientos se pueden exportar a PDF, Excel `.xlsx`, XML, TXT y CSV, conservando los filtros aplicados.
+- Los reportes incluyen fecha de pago y registro, persona, cliente asociado, motivo, categoría, importe, método, voucher, evidencias, estado y observaciones.
+- El PDF ofrece una vista tabular paginada; los campos largos se abrevian para mantener la legibilidad. Excel, XML, TXT y CSV conservan el contenido completo.
+- Las exportaciones XLSX incluyen autofiltro, encabezados, formato monetario, paneles congelados y configuración horizontal de impresión; los reportes anchos usan papel A3 para evitar dividir columnas en múltiples páginas.
+- Los estados de cuenta de mensualidades también se pueden exportar a los mismos formatos por cliente o para todos los clientes a una fecha de corte.
+- Se añadió el paquete portátil `.gfbak`: contiene una copia consistente de SQLite, evidencias y manifiesto de integridad SHA-256. Se rechazan enlaces simbólicos y rutas inseguras; la restauración valida el paquete y crea una copia de reversión antes de sustituir datos.
+- Se añadió conciencia de DPI por monitor en Windows para mantener texto y controles nítidos a escala nativa; la ventana se dimensiona según el monitor, sin renderizar a 720p.
+- No se agregaron dependencias pesadas al núcleo; los exportadores PDF/XLSX/XML/TXT/CSV y el calendario usan la biblioteca estándar y Tkinter.
+
 ## [0.4.0] — Temas, calendarios y ventanas premium
 - Se incorporaron tres temas seleccionables y persistentes: Claro premium, Gris suave y Oscuro elegante.
 - El cambio de tema actualiza tarjetas, paneles, tablas, gráficas, navegación, asistente, formularios y colores de estado; la preferencia se guarda en `data/ui_preferences.json`.
