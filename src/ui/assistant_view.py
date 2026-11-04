@@ -1,7 +1,8 @@
 import queue
 import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
+from src.ui.premium import messagebox, palette_for
 
 from src.agent.controller import FinancialAgent
 from src.voice.speech import is_voice_engine_available, listen_once
@@ -72,6 +73,24 @@ class AssistantView(ttk.Frame):
         if not is_voice_engine_available():
             self.voice_button.configure(state="disabled")
             self._append("Sistema", "El reconocimiento de voz no está configurado en este equipo. Puedes usar el asistente por texto.", "muted")
+
+    def set_theme(self, palette):
+        """Update the chat surface and message accents when the app theme changes."""
+        self.chat.configure(
+            bg=palette["panel"], fg=palette["text"],
+            insertbackground=palette["text"],
+            highlightbackground=palette["border"],
+        )
+        self.chat.tag_configure("user", foreground=palette["accent"])
+        self.chat.tag_configure("agent", foreground=palette["success"])
+        self.chat.tag_configure("body", foreground=palette["text"])
+        self.chat.tag_configure("muted", foreground=palette["muted"])
+        self.pending_bar.configure(bg=palette["bg"])
+        for button, primary in ((self.confirm_button, True), (self.cancel_button, False), (self.send_button, True), (self.voice_button, False)):
+            base = palette["accent"] if primary else palette["panel_alt"]
+            foreground = palette["panel"] if primary else palette["text"]
+            hover = palette["accent_hover"] if primary else palette["selected"]
+            button.configure(bg=base, fg=foreground, activebackground=hover, activeforeground=foreground)
 
     @staticmethod
     def _plain_button(parent, text, command, primary=False):

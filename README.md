@@ -1,6 +1,6 @@
 # Gestor Financiero
 
-**Versión 0.3.0** — incorpora un agente financiero local para consultar y administrar el programa mediante instrucciones escritas o, con el módulo opcional, por voz.
+**Versión 0.4.0** — incorpora tres temas visuales, ventanas emergentes premium y calendarios desplegables en los campos de fecha, además del panel interactivo y el agente financiero local.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
@@ -88,6 +88,15 @@ La base de datos y los comprobantes se guardan en `data/` durante el desarrollo.
 El resultado estará en `dist/GestorFinanciero/`. Para generar el instalador Setup.exe, abre `installer/installer_windows.iss` con Inno Setup después de compilar.
 
 La versión empaquetada guarda los datos de usuario en `%LOCALAPPDATA%\GestorFinanciero`, fuera de los archivos de la aplicación, para conservarlos al actualizar.
+
+## Novedades de 0.4.0
+
+- Tres apariencias seleccionables: **Claro premium**, **Gris suave** y **Oscuro elegante**. La selección se guarda y se restaura al volver a abrir la aplicación.
+- Los temas se aplican a navegación, tarjetas, gráficas, tablas, formularios, ventanas emergentes y al asistente.
+- Ventanas premium para avisos, confirmaciones, formularios, selección de comprobantes, historial de pagos y anulación. Incluyen cabecera propia, acento, cierre y entrada suave.
+- Calendario desplegable en primera fecha de cobro, fecha de vigencia de tarifas, fecha de pago y filtros por rango. Se puede seleccionar una fecha con un clic o escribirla manualmente; el formato almacenado sigue siendo `AAAA-MM-DD`.
+- El calendario permite avanzar y retroceder meses, ir a hoy y se coloca automáticamente arriba o abajo del campo según el espacio disponible.
+- No se agregaron bibliotecas externas ni requisitos de GPU.
 
 ## Novedades de 0.3.0
 

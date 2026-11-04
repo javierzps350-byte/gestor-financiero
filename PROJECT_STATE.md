@@ -23,6 +23,7 @@ Aplicación de escritorio financiera independiente, orientada primero a Windows 
 - `v0.1.4`: limpieza visual, retirada de iconos decorativos y textos redundantes.
 - `v0.2.0`: agente financiero local con consultas, preparación de operaciones, confirmación, navegación y adjuntos de Descargas.
 - `v0.3.0`: rediseño claro inspirado en panel financiero, gráficas interactivas con Canvas Tkinter y clasificación de gastos.
+- `v0.4.0`: tres temas persistentes, diálogos/ventanas premium y selector de fecha desplegable en todos los campos de fecha de la interfaz.
 
 La historia de Git contiene una instantánea de cada uno de esos paquetes.
 
@@ -32,7 +33,7 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 - `src/database/`: conexión SQLite, esquema y migraciones.
 - `src/domain/`: lógica de dinero y cálculo de mensualidades.
 - `src/services/`: operaciones financieras, evidencias y reportes.
-- `src/ui/`: ventana principal, vistas, diálogos, gráficas Canvas interactivas y conversación con el agente.
+- `src/ui/`: ventana principal, vistas, diálogos premium, gestor de temas, calendario desplegable, gráficas Canvas interactivas y conversación con el agente.
 - `src/agent/`: interpretación de instrucciones, consultas, borradores de operaciones y confirmación.
 - `src/voice/`: reconocimiento de voz opcional que alimenta al agente.
 - `src/integrations/`: puente opcional con NEXUS.
@@ -56,6 +57,9 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 - Categorías de gasto integradas en el registro. Las bases anteriores reciben la columna `category` con valor por defecto `Otros` mediante migración aditiva.
 - Exportación CSV y copias de seguridad.
 - Interfaz sin iconos decorativos ni textos promocionales; animaciones discretas y ligeras.
+- Temas Claro premium, Gris suave y Oscuro elegante, con preferencia persistente en `data/ui_preferences.json`.
+- Diálogos de confirmación/aviso y ventanas secundarias con encabezado premium, cierre y animación breve.
+- Calendarios desplegables en fecha de pago, inicio de cobro, vigencia de tarifa y filtros de búsqueda; el formato interno continúa siendo ISO `AAAA-MM-DD`.
 - El puente NEXUS no es requisito para arrancar ni operar el programa.
 
 ## Invariantes financieros
@@ -68,7 +72,8 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 6. Una anulación debe preservar el movimiento y su motivo de anulación; no borrar registros financieros.
 7. Toda migración de base de datos debe ser aditiva, idempotente y respaldar la base antes de modificarla.
 
-## Limitaciones conocidas de v0.3.0
+## Limitaciones conocidas de v0.4.0
+- Las ventanas, temas y calendarios se probaron con una sesión gráfica virtual (Xvfb); todavía falta validar la apariencia final en la computadora Windows del usuario con su resolución y escala DPI.
 
 - No existe todavía edición directa de movimientos; el flujo actual es anular con motivo y volver a registrar.
 - El agente puede preparar y confirmar registros por texto; el dictado por voz depende de instalar el módulo opcional de Vosk.

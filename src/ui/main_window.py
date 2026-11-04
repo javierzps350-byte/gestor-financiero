@@ -7,7 +7,7 @@ import zipfile
 import tkinter as tk
 from datetime import date
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
 
 from src.config import APP_NAME, BACKUP_DIR, EVIDENCE_DIR
 from src.database.connection import connect
@@ -20,6 +20,9 @@ from src.services.finance_service import (
 from src.services.evidence_service import evidence_absolute_path
 from src.services.report_service import export_debts_csv, export_movements_csv
 from src.ui.dialogs import ClientDialog, MovementDialog, RateDialog
+from src.ui.theme_manager import ThemeManager, THEMES
+from src.ui.premium import messagebox, palette_for, PremiumWindow
+from src.ui.date_picker import DatePickerEntry
 from src.ui.assistant_view import AssistantView
 from src.ui.charts import MonthlyLineChart, ExpenseDonutChart, TEAL, CORAL
 
@@ -54,6 +57,8 @@ class MainWindow:
         self.current_page = None
         self._transition_token = 0
         self._nav_widgets = {}
+        self.theme_manager = ThemeManager()
+        root.theme_manager = self.theme_manager
         root.title(APP_NAME)
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
@@ -61,41 +66,58 @@ class MainWindow:
         window_height = min(920, max(680, screen_height - 60))
         root.geometry(f"{window_width}x{window_height}+20+15")
         root.minsize(min(940, window_width), min(660, window_height))
-        root.configure(bg=BG)
+        root.configure(bg=self.theme_manager.palette["bg"])
         self._configure_style()
         self._build_shell()
+        self.apply_theme()
 
     def _configure_style(self):
-        style = ttk.Style(self.root)
-        style.theme_use("clam")
-        style.configure("TFrame", background=BG)
-        style.configure("Panel.TFrame", background=PANEL)
-        style.configure("TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 10))
-        style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
-        style.configure("Panel.TLabel", background=PANEL, foreground=TEXT, font=("Segoe UI", 10))
-        style.configure("DialogTitle.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 19, "bold"))
-        style.configure("Hint.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
-        style.configure("Title.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 21, "bold"))
-        style.configure("SubTitle.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
-        style.configure("TButton", font=("Segoe UI", 9), padding=(13, 8), background=PANEL_ALT, foreground=TEXT, borderwidth=0)
-        style.map("TButton", background=[("active", "#E4EDF4"), ("disabled", "#F0F3F6")], foreground=[("disabled", "#AAB4BF")])
-        style.configure("Accent.TButton", background=ACCENT, foreground="#FFFFFF", font=("Segoe UI", 9, "bold"), padding=(14, 9))
-        style.map("Accent.TButton", background=[("active", "#239987")])
-        style.configure("TEntry", fieldbackground=PANEL, foreground=TEXT, insertcolor=TEXT, bordercolor=BORDER, padding=9)
-        style.configure("TCombobox", fieldbackground=PANEL, background=PANEL, foreground=TEXT, arrowcolor=MUTED, padding=8)
-        style.map("TCombobox", fieldbackground=[("readonly", PANEL)], foreground=[("readonly", TEXT)])
-        style.configure("TCheckbutton", background=BG, foreground=TEXT, font=("Segoe UI", 9))
-        style.map("TCheckbutton", background=[("active", BG)])
-        style.configure("Treeview", background=PANEL, fieldbackground=PANEL, foreground=TEXT, rowheight=31, borderwidth=0, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background="#F3F6F9", foreground="#657489", relief="flat", font=("Segoe UI", 8, "bold"), padding=(10, 10))
-        style.map("Treeview", background=[("selected", "#D9F0EC")], foreground=[("selected", TEXT)])
-        style.configure("TScrollbar", background="#E7EDF3", troughcolor=BG, bordercolor=BG, arrowcolor=MUTED)
+        self.theme_manager.configure_styles(self.root)
+
+    def apply_theme(self):
+        charts = (self.dashboard.line_chart, self.dashboard.donut_chart) if hasattr(self, "dashboard") else ()
+        self.theme_manager.apply(self.root, charts=charts)
+        p = self.theme_manager.palette
+        if hasattr(self, "dashboard"):
+            self.dashboard.apply_theme(p)
+            self.dashboard.recent_tree.tag_configure("income", foreground=p["success"])
+            self.dashboard.recent_tree.tag_configure("expense", foreground=p["expense"])
+            self.dashboard.recent_tree.tag_configure("void", foreground=p["muted"])
+        for view_name in ("incomes", "expenses", "search"):
+            view = getattr(self, view_name, None)
+            if view is not None and hasattr(view, "tree"):
+                view.tree.tag_configure("void", foreground=p["muted"])
+        if hasattr(self, "debts"):
+            self.debts.tree.tag_configure("paid", foreground=p["success"])
+            self.debts.tree.tag_configure("late", foreground=p["danger"])
+            self.debts.tree.tag_configure("partial", foreground=p["expense"])
+            self.debts.apply_theme(p)
+        if hasattr(self, "assistant"):
+            self.assistant.set_theme(p)
+        if self.current_page:
+            self._set_nav_active(self.current_page)
+
+    def change_theme(self, _event=None):
+        selected = self.theme_var.get()
+        theme_id = self.theme_labels.get(selected)
+        if not theme_id:
+            return
+        self.theme_manager.set_theme(theme_id)
+        self.apply_theme()
 
     def _build_shell(self):
         top = tk.Frame(self.root, bg=WHITE, height=66, padx=28)
         top.pack(fill="x")
         top.pack_propagate(False)
         tk.Label(top, text="Gestor Financiero", bg=WHITE, fg=TEXT, font=("Segoe UI", 16, "bold")).pack(side="left", anchor="center")
+        theme_area = tk.Frame(top, bg=WHITE)
+        theme_area.pack(side="right", anchor="center")
+        ttk.Label(theme_area, text="Apariencia", style="Toolbar.TLabel").pack(side="left", padx=(0, 9))
+        self.theme_labels = {data["label"]: key for key, data in THEMES.items()}
+        self.theme_var = tk.StringVar(value=THEMES[self.theme_manager.theme_id]["label"])
+        self.theme_box = ttk.Combobox(theme_area, textvariable=self.theme_var, values=list(self.theme_labels), state="readonly", width=19)
+        self.theme_box.pack(side="left")
+        self.theme_box.bind("<<ComboboxSelected>>", self.change_theme)
         tk.Frame(self.root, bg=BORDER, height=1).pack(fill="x")
 
         shell = tk.Frame(self.root, bg=BG)
@@ -159,20 +181,22 @@ class MainWindow:
     def _nav_hover(self, page_id, hovered):
         if page_id == self.current_page:
             return
+        p = self.theme_manager.palette
         row, _indicator, button = self._nav_widgets[page_id]
-        color = "#F1F7F6" if hovered else SIDEBAR
+        color = p["selected"] if hovered else p["sidebar"]
         row.configure(bg=color)
         button.configure(bg=color)
 
     def _set_nav_active(self, page_id):
+        p = self.theme_manager.palette
         for key, (row, indicator, button) in self._nav_widgets.items():
             active = key == page_id
-            bg = "#E5F4F1" if active else SIDEBAR
+            bg = p["selected"] if active else p["sidebar"]
             row.configure(bg=bg)
-            indicator.configure(bg=ACCENT if active else SIDEBAR)
+            indicator.configure(bg=p["accent"] if active else p["sidebar"])
             button.configure(
                 bg=bg,
-                fg="#208E80" if active else "#748398",
+                fg=p["success"] if active else p["muted"],
                 font=("Segoe UI", 10, "bold" if active else "normal"),
             )
 
@@ -232,11 +256,21 @@ class DashboardView(ttk.Frame):
         self.table_month = None
         self.selected_category = None
         self._shown_values = {"balance": 0, "income": 0, "expenses": 0}
+        self._target_values = {"balance": 0, "income": 0, "expenses": 0}
         self._animation_ids = {}
         self._build()
 
     def _panel(self, parent, **kwargs):
         return tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=BORDER, **kwargs)
+
+    def apply_theme(self, palette):
+        targets = {
+            "balance": palette["text"] if self._target_values["balance"] >= 0 else palette["danger"],
+            "income": palette["accent"],
+            "expenses": palette["expense"],
+        }
+        for key, target in self._target_values.items():
+            self._animate_value(key, target, targets[key])
 
     def _build(self):
         heading = tk.Frame(self, bg=BG)
@@ -329,22 +363,25 @@ class DashboardView(ttk.Frame):
         self.recent_tree.configure(yscrollcommand=scrollbar.set)
         self.recent_tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-        self.recent_tree.tag_configure("income", foreground="#208F7E")
-        self.recent_tree.tag_configure("expense", foreground="#D9776B")
-        self.recent_tree.tag_configure("void", foreground="#A5AFBA")
+        self.recent_tree.tag_configure("income", foreground=palette_for(self)["success"])
+        self.recent_tree.tag_configure("expense", foreground=palette_for(self)["expense"])
+        self.recent_tree.tag_configure("void", foreground=palette_for(self)["muted"])
 
 
     @staticmethod
     def _action_button(parent, text, command, color):
+        role = "accent" if color == TEAL else "expense"
+        palette = palette_for(parent)
+        base = palette[role]
+        hover = palette["accent_hover"] if role == "accent" else palette["expense_hover"]
         button = tk.Button(
             parent, text=text, command=command, anchor="center",
-            bg=color, fg=WHITE, activebackground=color, activeforeground=WHITE,
+            bg=base, fg=palette["panel"], activebackground=hover, activeforeground=palette["panel"],
             relief="flat", bd=0, highlightthickness=0,
             padx=17, pady=10, font=("Segoe UI", 9, "bold"), cursor="hand2",
         )
-        hover = "#238F80" if color == TEAL else "#D9786D"
-        button.bind("<Enter>", lambda _event: button.configure(bg=hover))
-        button.bind("<Leave>", lambda _event: button.configure(bg=color))
+        button.bind("<Enter>", lambda _event: button.configure(bg=(palette_for(parent)["accent_hover"] if role == "accent" else palette_for(parent)["expense_hover"])))
+        button.bind("<Leave>", lambda _event: button.configure(bg=palette_for(parent)[role]))
         return button
 
     def _new_income(self):
@@ -382,6 +419,7 @@ class DashboardView(ttk.Frame):
                 pass
         start = int(self._shown_values.get(key, 0))
         target = int(amount)
+        self._target_values[key] = target
         steps = 10
         def tick(step=1):
             value = int(start + (target - start) * step / steps)
@@ -401,10 +439,11 @@ class DashboardView(ttk.Frame):
                 table_month=self.table_month,
                 category=self.selected_category,
             )
+            palette = palette_for(self)
             targets = {
-                "balance": (data["balance_cents"], "#314D64" if data["balance_cents"] >= 0 else RED),
-                "income": (data["income_month_cents"], TEAL),
-                "expenses": (data["expenses_month_cents"], CORAL),
+                "balance": (data["balance_cents"], palette["text"] if data["balance_cents"] >= 0 else palette["danger"]),
+                "income": (data["income_month_cents"], palette["accent"]),
+                "expenses": (data["expenses_month_cents"], palette["expense"]),
             }
             for key, (amount, color) in targets.items():
                 self._animate_value(key, amount, color)
@@ -488,10 +527,10 @@ class MovementView(ttk.Frame):
         self.voucher_var = tk.StringVar()
         ttk.Label(filters, text="Buscar").grid(row=0, column=0, sticky="w")
         ttk.Entry(filters, textvariable=self.query_var, width=29).grid(row=1, column=0, padx=(0, 9), sticky="ew")
-        ttk.Label(filters, text="Desde (AAAA-MM-DD)").grid(row=0, column=1, sticky="w")
-        ttk.Entry(filters, textvariable=self.from_var, width=17).grid(row=1, column=1, padx=(0, 9), sticky="ew")
-        ttk.Label(filters, text="Hasta (AAAA-MM-DD)").grid(row=0, column=2, sticky="w")
-        ttk.Entry(filters, textvariable=self.to_var, width=17).grid(row=1, column=2, padx=(0, 9), sticky="ew")
+        ttk.Label(filters, text="Desde").grid(row=0, column=1, sticky="w")
+        DatePickerEntry(filters, textvariable=self.from_var, width=12).grid(row=1, column=1, padx=(0, 9), sticky="ew")
+        ttk.Label(filters, text="Hasta").grid(row=0, column=2, sticky="w")
+        DatePickerEntry(filters, textvariable=self.to_var, width=12).grid(row=1, column=2, padx=(0, 9), sticky="ew")
         ttk.Label(filters, text="N.º voucher").grid(row=0, column=3, sticky="w")
         ttk.Entry(filters, textvariable=self.voucher_var, width=17).grid(row=1, column=3, padx=(0, 9), sticky="ew")
         ttk.Button(filters, text="Buscar", command=self.refresh).grid(row=1, column=4, padx=(0, 7))
@@ -518,7 +557,7 @@ class MovementView(ttk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         yscroll.pack(side="right", fill="y")
         xscroll.pack(fill="x")
-        self.tree.tag_configure("void", foreground="#8995A7")
+        self.tree.tag_configure("void", foreground=palette_for(self)["muted"])
         self.tree.bind("<Double-1>", lambda _e: self.open_evidence())
 
         actions = ttk.Frame(self)
@@ -579,15 +618,12 @@ class MovementView(ttk.Frame):
         if len(rows) == 1:
             self._open_path(evidence_absolute_path(rows[0]["relative_path"]))
             return
-        dialog = tk.Toplevel(self)
-        dialog.title("Evidencias del movimiento")
-        dialog.geometry("520x330")
-        dialog.configure(bg=BG)
-        dialog.transient(self)
-        frame = ttk.Frame(dialog, padding=16)
+        dialog = PremiumWindow(self, "Evidencias del movimiento", "520x330")
+        frame = ttk.Frame(dialog.body, padding=4)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="Selecciona el archivo que deseas abrir:").pack(anchor="w", pady=(0, 10))
-        listing = tk.Listbox(frame, bg=PANEL, fg=TEXT, selectbackground="#D9F0EC", relief="flat", font=("Segoe UI", 9))
+        p = palette_for(self)
+        listing = tk.Listbox(frame, bg=p["panel"], fg=p["text"], selectbackground=p["selected"], selectforeground=p["text"], relief="flat", font=("Segoe UI", 9))
         listing.pack(fill="both", expand=True)
         for row in rows:
             listing.insert("end", row["original_name"])
@@ -618,13 +654,8 @@ class MovementView(ttk.Frame):
         movement_id = self.selected_id()
         if movement_id is None:
             return
-        dialog = tk.Toplevel(self)
-        dialog.title("Anular movimiento")
-        dialog.geometry("470x220")
-        dialog.configure(bg=BG)
-        dialog.transient(self)
-        dialog.grab_set()
-        frame = ttk.Frame(dialog, padding=20)
+        dialog = PremiumWindow(self, "Anular movimiento", "470x240", modal=True)
+        frame = ttk.Frame(dialog.body, padding=4)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text=f"Anular movimiento #{movement_id}", style="DialogTitle.TLabel").pack(anchor="w", pady=(0, 12))
         ttk.Label(frame, text="Motivo de anulación (obligatorio)").pack(anchor="w")
@@ -739,6 +770,7 @@ class DebtView(ttk.Frame):
         self.summary_frame = ttk.Frame(self)
         self.summary_frame.pack(fill="x", pady=(0, 12))
         self.summary_labels = {}
+        self._last_summary = None
         for key, label in [("received", "TOTAL RECIBIDO"), ("paid", "MESES CUBIERTOS"), ("overdue", "DEUDA VENCIDA"), ("pending", "PENDIENTE TOTAL"), ("advance", "ABONOS EN FUTUROS MESES")]:
             card = tk.Frame(self.summary_frame, bg=PANEL, padx=12, pady=12)
             card.pack(side="left", fill="both", expand=True, padx=(0, 7))
@@ -756,10 +788,16 @@ class DebtView(ttk.Frame):
             self.tree.heading(key, text=label)
             self.tree.column(key, width=width, anchor="center")
         self.tree.pack(fill="both", expand=True)
-        self.tree.tag_configure("paid", foreground=GREEN)
-        self.tree.tag_configure("late", foreground=RED)
-        self.tree.tag_configure("partial", foreground="#E8BA68")
+        p = palette_for(self)
+        self.tree.tag_configure("paid", foreground=p["success"])
+        self.tree.tag_configure("late", foreground=p["danger"])
+        self.tree.tag_configure("partial", foreground=p["expense"])
         self.refresh_clients()
+
+    def apply_theme(self, palette):
+        if self._last_summary is not None:
+            overdue = int(self._last_summary.get("overdue_cents", 0))
+            self.summary_labels["overdue"].configure(fg=palette["danger"] if overdue else palette["text"])
 
     def refresh_clients(self):
         clients = list_clients(active_only=True)
@@ -785,9 +823,11 @@ class DebtView(ttk.Frame):
         client_id = int(client["id"])
         try:
             summary = client_debt_summary(client_id)
+            self._last_summary = summary
             self.summary_labels["received"].configure(text=format_money(summary["total_received_cents"]))
             self.summary_labels["paid"].configure(text=str(summary["fully_paid_months"]))
-            self.summary_labels["overdue"].configure(text=format_money(summary["overdue_cents"]), fg=RED if summary["overdue_cents"] else TEXT)
+            palette = palette_for(self)
+            self.summary_labels["overdue"].configure(text=format_money(summary["overdue_cents"]), fg=palette["danger"] if summary["overdue_cents"] else palette["text"])
             self.summary_labels["pending"].configure(text=format_money(summary["pending_cents"]))
             self.summary_labels["advance"].configure(text=format_money(summary["future_applied_cents"]))
             charges = list_client_charges(client_id)
@@ -820,13 +860,8 @@ class DebtView(ttk.Frame):
 
         client_id = int(client["id"])
         rows = client_payment_history(client_id)
-        dialog = tk.Toplevel(self)
-        dialog.title(f"Historial de pagos · {client['name']}")
-        dialog.geometry("1120x520")
-        dialog.minsize(900, 420)
-        dialog.configure(bg=BG)
-        dialog.transient(self)
-        frame = ttk.Frame(dialog, padding=18)
+        dialog = PremiumWindow(self, f"Historial de pagos · {client['name']}", "1120x520")
+        frame = ttk.Frame(dialog.body, padding=4)
         frame.pack(fill="both", expand=True)
 
         ttk.Label(frame, text=f"Historial de pagos · {client['name']}", style="DialogTitle.TLabel").pack(anchor="w")
@@ -849,7 +884,7 @@ class DebtView(ttk.Frame):
             tree.heading(key_name, text=label)
             tree.column(key_name, width=width, minwidth=65, anchor="w" if key_name == "reason" else "center")
         tree.pack(fill="both", expand=True)
-        tree.tag_configure("void", foreground="#8995A7")
+        tree.tag_configure("void", foreground=palette_for(dialog)["muted"])
 
         total_received = 0
         total_applied = 0

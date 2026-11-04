@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## [0.4.0] — Temas, calendarios y ventanas premium
+- Se incorporaron tres temas seleccionables y persistentes: Claro premium, Gris suave y Oscuro elegante.
+- El cambio de tema actualiza tarjetas, paneles, tablas, gráficas, navegación, asistente, formularios y colores de estado; la preferencia se guarda en `data/ui_preferences.json`.
+- Se añadieron ventanas emergentes de estilo premium para avisos, confirmaciones, selección de evidencias, historial de pagos y anulación de movimientos.
+- Las ventanas secundarias incorporan encabezado propio, acento de color, cierre, movimiento por arrastre y entrada con fundido suave.
+- Se añadió un calendario desplegable en primera fecha de cobro, fecha de vigencia de tarifa, fecha de pago y filtros Desde/Hasta. El valor continúa guardándose como `AAAA-MM-DD` y también puede escribirse manualmente.
+- El calendario se posiciona para permanecer dentro de la pantalla y permite cambiar de mes o seleccionar rápidamente la fecha de hoy.
+- No se añadieron dependencias externas; se mantiene Tkinter/Canvas para conservar el rendimiento en equipos modestos.
+- Se corrigió la adaptación de colores de widgets Tk clásicos para evitar colores de texto de bajo contraste al alternar temas.
+- Se añadieron pruebas para las paletas, persistencia de tema y matriz del calendario.
+
 ## [0.3.0] — Panel financiero interactivo
 - Rediseño general del programa con una interfaz clara, tarjetas blancas y navegación lateral compacta.
 - Nuevo panel con saldo acumulado registrado, ingresos del mes y egresos del mes.

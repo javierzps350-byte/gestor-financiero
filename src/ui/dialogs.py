@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
 from datetime import date
 
 from src.domain.money import to_cents
@@ -8,15 +8,18 @@ from src.services.finance_service import (
     create_client, create_movement, find_voucher_matches, list_clients, set_client_rate,
 )
 from src.services.evidence_service import attach_evidence, find_recent_downloads
+from src.ui.date_picker import DatePickerEntry
+from src.ui.premium import messagebox, palette_for, PremiumWindow
 
 
 def primary_button(parent, text: str, command):
     """Button with explicit Tk styling to avoid ttk theme/DPI rendering quirks."""
+    p = palette_for(parent)
     return tk.Button(
         parent, text=text, command=command,
-        bg="#2BAE9B", fg="#FFFFFF",
-        activebackground="#239987", activeforeground="#FFFFFF",
-        disabledforeground="#A0AAB7",
+        bg=p["accent"], fg=p["panel"],
+        activebackground=p["accent_hover"], activeforeground=p["panel"],
+        disabledforeground=p["muted"],
         font=("Segoe UI", 9, "bold"),
         relief="flat", bd=0, highlightthickness=0,
         padx=18, pady=9, cursor="hand2",
@@ -30,10 +33,42 @@ class BaseDialog(tk.Toplevel):
         self.title(title)
         self.geometry(size)
         self.resizable(False, False)
-        self.transient(parent)
+        self.transient(parent.winfo_toplevel())
         self.grab_set()
-        self.configure(bg="#F2F6FA")
+        self.theme_manager = getattr(parent.winfo_toplevel(), "theme_manager", None)
+        self._palette = self.theme_manager.palette if self.theme_manager else palette_for(parent)
+        self.configure(bg=self._palette["bg"], highlightthickness=1, highlightbackground=self._palette["border"])
+        tk.Frame(self, bg=self._palette["accent"], height=4).pack(fill="x", side="top")
         self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self._center_over(parent)
+        try:
+            self.attributes("-alpha", 0.0)
+            self.after(10, self._fade_in)
+        except tk.TclError:
+            pass
+
+    def _center_over(self, parent):
+        self.update_idletasks()
+        try:
+            owner = parent.winfo_toplevel()
+            x = owner.winfo_rootx() + max(0, (owner.winfo_width() - self.winfo_width()) // 2)
+            y = owner.winfo_rooty() + max(0, (owner.winfo_height() - self.winfo_height()) // 2)
+            self.geometry(f"{self.winfo_width()}x{self.winfo_height()}+{x}+{y}")
+        except Exception:
+            pass
+
+    def _fade_in(self, step=0):
+        try:
+            self.attributes("-alpha", min(1.0, (step + 1) / 8))
+        except tk.TclError:
+            return
+        if step < 7 and self.winfo_exists():
+            self.after(16, lambda: self._fade_in(step + 1))
+
+    def _apply_theme(self):
+        manager = getattr(self.master.winfo_toplevel(), "theme_manager", None)
+        if manager:
+            manager.recolor_tree(self)
 
 
 class ClientDialog(BaseDialog):
@@ -59,10 +94,14 @@ class ClientDialog(BaseDialog):
         buttons.pack(fill="x", side="bottom")
         ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right", padx=(8, 0))
         primary_button(buttons, "Guardar cliente", self.save).pack(side="right", ipadx=3, ipady=1)
+        self._apply_theme()
 
     def _field(self, parent, label, key):
         ttk.Label(parent, text=label).pack(anchor="w", pady=(8, 3))
-        entry = ttk.Entry(parent, textvariable=self.vars[key])
+        if key == "start":
+            entry = DatePickerEntry(parent, textvariable=self.vars[key])
+        else:
+            entry = ttk.Entry(parent, textvariable=self.vars[key])
         entry.pack(fill="x")
         if key == "name":
             entry.focus_set()
@@ -72,12 +111,8 @@ class ClientDialog(BaseDialog):
         if not recent:
             messagebox.showinfo("Descargas recientes", "No se encontraron archivos recientes en la carpeta Descargas.", parent=self)
             return
-        dialog = tk.Toplevel(self)
-        dialog.title("Archivos recientes de Descargas")
-        dialog.geometry("720x420")
-        dialog.configure(bg="#F2F6FA")
-        dialog.transient(self)
-        frame = ttk.Frame(dialog, padding=16)
+        dialog = PremiumWindow(self, "Archivos recientes de Descargas", "720x420", modal=True)
+        frame = ttk.Frame(dialog.body, padding=4)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="Selecciona el comprobante correcto. Solo se mostrarán archivos de los últimos 7 días.", style="Hint.TLabel").pack(anchor="w", pady=(0, 10))
         columns = ("name", "modified", "size")
@@ -137,13 +172,14 @@ class RateDialog(BaseDialog):
         self.date_var = tk.StringVar(value=date.today().isoformat())
         ttk.Label(body, text="Nueva mensualidad en dólares").pack(anchor="w", pady=(12, 3))
         ttk.Entry(body, textvariable=self.amount_var).pack(fill="x")
-        ttk.Label(body, text="Fecha desde la que aplica (AAAA-MM-DD)").pack(anchor="w", pady=(12, 3))
-        ttk.Entry(body, textvariable=self.date_var).pack(fill="x")
+        ttk.Label(body, text="Fecha desde la que aplica").pack(anchor="w", pady=(12, 3))
+        DatePickerEntry(body, textvariable=self.date_var).pack(fill="x")
         ttk.Label(body, text="Usa como fecha de vigencia el inicio de un ciclo mensual.", style="Hint.TLabel").pack(anchor="w", pady=8)
         buttons = ttk.Frame(body)
         buttons.pack(fill="x", side="bottom", pady=(12, 0))
         ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right", padx=(8, 0))
         primary_button(buttons, "Guardar tarifa", self.save).pack(side="right", ipadx=3, ipady=1)
+        self._apply_theme()
 
     def save(self):
         try:
@@ -190,7 +226,7 @@ class MovementDialog(BaseDialog):
         self._field(body, "Persona / empresa *", "counterparty")
         self._field(body, "Motivo del movimiento *", "reason")
         self._field(body, "Importe recibido o pagado *", "amount")
-        self._field(body, "Fecha del pago (AAAA-MM-DD) *", "date")
+        self._field(body, "Fecha del pago *", "date")
         ttk.Label(body, text="Tipo de pago *").pack(anchor="w", pady=(9, 3))
         ttk.Combobox(body, textvariable=self.vars["method"], values=self.METHODS, state="readonly").pack(fill="x")
         if direction == "expense":
@@ -218,10 +254,14 @@ class MovementDialog(BaseDialog):
         buttons.pack(fill="x", side="bottom", pady=(14, 0))
         ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right", padx=(8, 0))
         primary_button(buttons, "Guardar movimiento", self.save).pack(side="right", ipadx=3, ipady=1)
+        self._apply_theme()
 
     def _field(self, parent, label, key):
         ttk.Label(parent, text=label).pack(anchor="w", pady=(9, 3))
-        entry = ttk.Entry(parent, textvariable=self.vars[key])
+        if key == "date":
+            entry = DatePickerEntry(parent, textvariable=self.vars[key])
+        else:
+            entry = ttk.Entry(parent, textvariable=self.vars[key])
         entry.pack(fill="x")
 
     def _client_selected(self, _event=None):
@@ -247,12 +287,8 @@ class MovementDialog(BaseDialog):
         if not recent:
             messagebox.showinfo("Descargas recientes", "No se encontraron archivos recientes en la carpeta Descargas.", parent=self)
             return
-        dialog = tk.Toplevel(self)
-        dialog.title("Archivos recientes de Descargas")
-        dialog.geometry("720x420")
-        dialog.configure(bg="#F2F6FA")
-        dialog.transient(self)
-        frame = ttk.Frame(dialog, padding=16)
+        dialog = PremiumWindow(self, "Archivos recientes de Descargas", "720x420", modal=True)
+        frame = ttk.Frame(dialog.body, padding=4)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="Selecciona el comprobante correcto. Solo se mostrarán archivos de los últimos 7 días.", style="Hint.TLabel").pack(anchor="w", pady=(0, 10))
         columns = ("name", "modified", "size")
