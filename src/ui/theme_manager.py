@@ -113,20 +113,74 @@ class ThemeManager:
         style.configure("Hint.TLabel", background=p["bg"], foreground=p["muted"], font=("Segoe UI", 9))
         style.configure("Title.TLabel", background=p["bg"], foreground=p["text"], font=("Segoe UI", 21, "bold"))
         style.configure("SubTitle.TLabel", background=p["bg"], foreground=p["muted"], font=("Segoe UI", 9))
-        style.configure("TButton", font=("Segoe UI", 9), padding=(13, 8), background=p["panel_alt"], foreground=p["text"], borderwidth=0)
-        style.map("TButton", background=[("active", p["selected"]), ("disabled", p["panel_alt"])], foreground=[("disabled", p["muted"])])
-        style.configure("Accent.TButton", background=p["accent"], foreground=p["panel"], font=("Segoe UI", 9, "bold"), padding=(14, 9))
-        style.map("Accent.TButton", background=[("active", p["accent_hover"])])
-        style.configure("TEntry", fieldbackground=p["input"], foreground=p["text"], insertcolor=p["text"], bordercolor=p["border"], padding=9)
-        style.map("TEntry", fieldbackground=[("disabled", p["panel_alt"])])
-        style.configure("TCombobox", fieldbackground=p["input"], background=p["input"], foreground=p["text"], arrowcolor=p["muted"], padding=8)
-        style.map("TCombobox", fieldbackground=[("readonly", p["input"])], foreground=[("readonly", p["text"])])
-        style.configure("TCheckbutton", background=p["bg"], foreground=p["text"], font=("Segoe UI", 9))
-        style.map("TCheckbutton", background=[("active", p["bg"])])
-        style.configure("Treeview", background=p["panel"], fieldbackground=p["panel"], foreground=p["text"], rowheight=31, borderwidth=0, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background=p["table_header"], foreground=p["muted"], relief="flat", font=("Segoe UI", 8, "bold"), padding=(10, 10))
+        # A restrained visual system shared by every form and filter.
+        style.configure(
+            "TButton", font=("Segoe UI", 9), padding=(15, 9),
+            background=p["panel_alt"], foreground=p["text"],
+            borderwidth=0, relief="flat", focusthickness=0,
+        )
+        style.map(
+            "TButton",
+            background=[("pressed", p["border"]), ("active", p["selected"]), ("disabled", p["panel_alt"])],
+            foreground=[("disabled", p["muted"])],
+        )
+        style.configure(
+            "Accent.TButton", background=p["accent"], foreground=p["panel"],
+            font=("Segoe UI", 9, "bold"), padding=(17, 10), borderwidth=0,
+            relief="flat", focusthickness=0,
+        )
+        style.map("Accent.TButton", background=[("pressed", p["accent_hover"]), ("active", p["accent_hover"])])
+        style.configure(
+            "Quiet.TButton", background=p["panel"], foreground=p["muted"],
+            font=("Segoe UI", 9, "bold"), padding=(12, 8), borderwidth=0,
+            relief="flat", focusthickness=0,
+        )
+        style.map("Quiet.TButton", background=[("active", p["panel_alt"])], foreground=[("active", p["text"])])
+        style.configure(
+            "TEntry", fieldbackground=p["input"], foreground=p["text"],
+            insertcolor=p["text"], bordercolor=p["border"], lightcolor=p["border"],
+            darkcolor=p["border"], padding=(12, 9), borderwidth=1,
+            relief="flat", font=("Segoe UI", 10),
+        )
+        style.map(
+            "TEntry", fieldbackground=[("disabled", p["panel_alt"])],
+            bordercolor=[("focus", p["accent"]), ("!focus", p["border"])],
+            lightcolor=[("focus", p["accent"]), ("!focus", p["border"])],
+            darkcolor=[("focus", p["accent"]), ("!focus", p["border"])],
+        )
+        # The down-arrow element is intentionally omitted. The standard ttk
+        # combobox binding opens the popdown when any part of this field is
+        # clicked, keeping the control compact and visually contemporary.
+        style.layout("Elegant.TCombobox", [
+            ("Combobox.field", {"sticky": "nswe", "children": [
+                ("Combobox.padding", {"sticky": "nswe", "children": [
+                    ("Combobox.textarea", {"sticky": "nswe"}),
+                ]}),
+            ]}),
+        ])
+        style.configure(
+            "Elegant.TCombobox", fieldbackground=p["input"], background=p["input"],
+            foreground=p["text"], bordercolor=p["border"], lightcolor=p["border"],
+            darkcolor=p["border"], padding=(12, 9), borderwidth=1,
+            relief="flat", font=("Segoe UI", 10),
+        )
+        style.map(
+            "Elegant.TCombobox",
+            fieldbackground=[("readonly", p["input"]), ("disabled", p["panel_alt"])],
+            foreground=[("readonly", p["text"]), ("disabled", p["muted"])],
+            bordercolor=[("focus", p["accent"]), ("!focus", p["border"])],
+            lightcolor=[("focus", p["accent"]), ("!focus", p["border"])],
+            darkcolor=[("focus", p["accent"]), ("!focus", p["border"])],
+        )
+        style.configure("TCheckbutton", background=p["bg"], foreground=p["text"], font=("Segoe UI", 9), padding=(3, 5))
+        style.map("TCheckbutton", background=[("active", p["bg"])], foreground=[("disabled", p["muted"])])
+        style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
+        style.configure("Treeview", background=p["panel"], fieldbackground=p["panel"], foreground=p["text"], rowheight=34, borderwidth=0, relief="flat", font=("Segoe UI", 9))
+        style.configure("Treeview.Heading", background=p["table_header"], foreground=p["muted"], relief="flat", borderwidth=0, font=("Segoe UI", 8, "bold"), padding=(12, 11))
         style.map("Treeview", background=[("selected", p["selected"])], foreground=[("selected", p["text"])])
-        style.configure("TScrollbar", background=p["panel_alt"], troughcolor=p["bg"], bordercolor=p["bg"], arrowcolor=p["muted"])
+        style.layout("Vertical.TScrollbar", [("Vertical.Scrollbar.trough", {"sticky": "ns", "children": [("Vertical.Scrollbar.thumb", {"sticky": "nswe"})]})])
+        style.layout("Horizontal.TScrollbar", [("Horizontal.Scrollbar.trough", {"sticky": "we", "children": [("Horizontal.Scrollbar.thumb", {"sticky": "nswe"})]})])
+        style.configure("TScrollbar", background=p["panel_alt"], troughcolor=p["bg"], bordercolor=p["bg"], arrowcolor=p["muted"], width=10)
 
     def recolor_tree(self, widget) -> None:
         """Recolor classic Tk widgets using semantic roles from their current colors."""

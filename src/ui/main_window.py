@@ -25,6 +25,7 @@ from src.ui.dialogs import ClientDialog, MovementDialog, RateDialog
 from src.ui.theme_manager import ThemeManager, THEMES
 from src.ui.premium import messagebox, palette_for, PremiumWindow
 from src.ui.date_picker import DatePickerEntry
+from src.ui.widgets import ElegantCombobox
 from src.ui.assistant_view import AssistantView
 from src.ui.charts import MonthlyLineChart, ExpenseDonutChart, TEAL, CORAL
 
@@ -89,7 +90,10 @@ class MainWindow:
         p = self.theme_manager.palette
         if hasattr(self, "data_button"):
             self.data_button.configure(bg=p["panel"], fg=p["text"], activebackground=p["selected"], activeforeground=p["text"])
-            self.data_menu.configure(bg=p["panel"], fg=p["text"], activebackground=p["selected"], activeforeground=p["text"])
+        if hasattr(self, "theme_button"):
+            self.theme_button.configure(text=self._theme_button_text(), bg=p["sidebar"], fg=p["text"], activebackground=p["selected"], activeforeground=p["text"])
+        if hasattr(self, "theme_panel") and self.theme_panel.winfo_manager():
+            self._build_theme_options()
         if hasattr(self, "dashboard"):
             self.dashboard.apply_theme(p)
             self.dashboard.recent_tree.tag_configure("income", foreground=p["success"])
@@ -109,13 +113,101 @@ class MainWindow:
         if self.current_page:
             self._set_nav_active(self.current_page)
 
-    def change_theme(self, _event=None):
-        selected = self.theme_var.get()
-        theme_id = self.theme_labels.get(selected)
-        if not theme_id:
+    def change_theme(self, theme_id: str):
+        if theme_id not in THEMES:
             return
         self.theme_manager.set_theme(theme_id)
         self.apply_theme()
+        self.root.after_idle(self.root.focus_set)
+
+    def _position_floating_window(self, window, anchor, width, height, side="right"):
+        self.root.update_idletasks()
+        anchor.update_idletasks()
+        if side == "right":
+            x = anchor.winfo_rootx() + anchor.winfo_width() + 12
+        else:
+            x = anchor.winfo_rootx() - width - 12
+        y = anchor.winfo_rooty() + anchor.winfo_height() - height
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        x = max(8, min(x, screen_w - width - 8))
+        y = max(8, min(y, screen_h - height - 8))
+        window.geometry(f"{width}x{height}+{x}+{y}")
+
+    def open_theme_picker(self):
+        """Expand/collapse a compact theme selector inside the sidebar."""
+        if self.theme_panel.winfo_manager():
+            self.theme_panel.pack_forget()
+            return
+        self._build_theme_options()
+        self.theme_panel.pack(fill="x", before=self.theme_button, pady=(0, 7))
+        self.theme_button.configure(relief="flat")
+
+    def _build_theme_options(self):
+        for child in self.theme_panel.winfo_children():
+            child.destroy()
+        p = self.theme_manager.palette
+        self.theme_panel.configure(bg=p["sidebar"])
+        for theme_id, theme in THEMES.items():
+            active = theme_id == self.theme_manager.theme_id
+            card_bg = p["selected"] if active else p["panel"]
+            card = tk.Frame(
+                self.theme_panel, bg=card_bg, padx=5, pady=5,
+                highlightthickness=1,
+                highlightbackground=p["accent"] if active else p["border"],
+            )
+            card.pack(fill="x", pady=2)
+            swatches = tk.Frame(card, bg=card_bg)
+            swatches.pack(fill="x", pady=(0, 3))
+            for color in (theme["bg"], theme["panel"], theme["accent"], theme["expense"]):
+                tk.Frame(swatches, bg=color, width=17, height=5, highlightthickness=0).pack(side="left", padx=(0, 3))
+            label = {
+                "claro": "Claro premium",
+                "suave": "Gris suave",
+                "oscuro": "Oscuro elegante",
+            }.get(theme_id, theme["label"])
+            button = tk.Button(
+                card, text=label, anchor="w", command=lambda key=theme_id: self._select_theme(key),
+                bg=card_bg, fg=p["text"], activebackground=p["selected"], activeforeground=p["text"],
+                relief="flat", bd=0, highlightthickness=0,
+                font=("Segoe UI", 8, "bold" if active else "normal"), cursor="hand2",
+                padx=1, pady=1, wraplength=88, justify="left",
+            )
+            button.pack(fill="x")
+            card.bind("<Button-1>", lambda _e, key=theme_id: self._select_theme(key))
+            swatches.bind("<Button-1>", lambda _e, key=theme_id: self._select_theme(key))
+
+    def _select_theme(self, theme_id):
+        self.change_theme(theme_id)
+
+    def open_data_actions(self):
+        current = getattr(self, "_data_picker", None)
+        if current is not None:
+            try:
+                if current.winfo_exists():
+                    current.lift()
+                    return
+            except tk.TclError:
+                self._data_picker = None
+        dialog = PremiumWindow(self.root, "Datos", "356x190", modal=False)
+        self._data_picker = dialog
+        p = self.theme_manager.palette
+        ttk.Label(dialog.body, text="Respaldo y traslado de información", style="Hint.TLabel").pack(anchor="w", pady=(0, 10))
+        for label, callback in (
+            ("Crear paquete para trasladar…", self.export_portable_backup),
+            ("Restaurar paquete en este equipo…", self.import_portable_backup),
+        ):
+            button = ttk.Button(dialog.body, text=label, style="Quiet.TButton", command=lambda action=callback, popup=dialog: self._run_data_action(action, popup))
+            button.pack(fill="x", pady=4)
+        self._position_floating_window(dialog, self.data_button, 356, 190, side="left")
+
+    def _run_data_action(self, callback, dialog):
+        try:
+            dialog.destroy()
+        except tk.TclError:
+            pass
+        self._data_picker = None
+        callback()
 
     def export_portable_backup(self):
         stamp = date.today().strftime("%Y%m%d")
@@ -170,39 +262,52 @@ class MainWindow:
         except Exception as exc:
             messagebox.showerror("No se pudo restaurar el paquete", str(exc), parent=self.root)
 
+    def _theme_button_text(self):
+        label = THEMES[self.theme_manager.theme_id]["label"]
+        return f"Apariencia\n{label}"
+
     def _build_shell(self):
         top = tk.Frame(self.root, bg=WHITE, height=66, padx=28)
         top.pack(fill="x")
         top.pack_propagate(False)
         tk.Label(top, text="Gestor Financiero", bg=WHITE, fg=TEXT, font=("Segoe UI", 16, "bold")).pack(side="left", anchor="center")
-        theme_area = tk.Frame(top, bg=WHITE)
-        theme_area.pack(side="right", anchor="center")
-        self.data_button = tk.Menubutton(
-            theme_area, text="Datos", bg=WHITE, fg=TEXT,
-            activebackground="#EAF5F3", activeforeground=TEXT,
+        self.data_button = tk.Button(
+            top, text="Datos", command=self.open_data_actions,
+            bg=WHITE, fg=TEXT, activebackground="#EAF5F3", activeforeground=TEXT,
             relief="flat", bd=0, highlightthickness=0,
-            font=("Segoe UI", 9, "bold"), padx=12, pady=8, cursor="hand2",
+            font=("Segoe UI", 9, "bold"), padx=15, pady=9, cursor="hand2",
         )
-        self.data_menu = tk.Menu(self.data_button, tearoff=False)
-        self.data_menu.add_command(label="Crear paquete para trasladar…", command=self.export_portable_backup)
-        self.data_menu.add_command(label="Restaurar paquete en este equipo…", command=self.import_portable_backup)
-        self.data_button.configure(menu=self.data_menu)
-        self.data_button.pack(side="left", padx=(0, 14))
-        ttk.Label(theme_area, text="Apariencia", style="Toolbar.TLabel").pack(side="left", padx=(0, 9))
-        self.theme_labels = {data["label"]: key for key, data in THEMES.items()}
-        self.theme_var = tk.StringVar(value=THEMES[self.theme_manager.theme_id]["label"])
-        self.theme_box = ttk.Combobox(theme_area, textvariable=self.theme_var, values=list(self.theme_labels), state="readonly", width=19)
-        self.theme_box.pack(side="left")
-        self.theme_box.bind("<<ComboboxSelected>>", self.change_theme)
+        self.data_button.pack(side="right", anchor="center")
+        self.data_button.bind("<Enter>", lambda _e: self.data_button.configure(bg=self.theme_manager.palette["selected"]))
+        self.data_button.bind("<Leave>", lambda _e: self.data_button.configure(bg=self.theme_manager.palette["panel"]))
         tk.Frame(self.root, bg=BORDER, height=1).pack(fill="x")
 
         shell = tk.Frame(self.root, bg=BG)
         shell.pack(fill="both", expand=True)
-        self.sidebar = tk.Frame(shell, bg=SIDEBAR, width=112, padx=8, pady=20, highlightthickness=1, highlightbackground=BORDER)
+        self.sidebar = tk.Frame(shell, bg=SIDEBAR, width=124, padx=9, pady=18, highlightthickness=1, highlightbackground=BORDER)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
         for page_id, label in self.NAV_ITEMS:
             self._make_nav_button(page_id, label)
+
+        # Theme selection lives at the bottom of the navigation rail, not in
+        # the page header. No text-selection widget remains after a theme pick.
+        sidebar_footer = tk.Frame(self.sidebar, bg=SIDEBAR)
+        sidebar_footer.pack(side="bottom", fill="x", pady=(10, 0))
+        tk.Frame(sidebar_footer, bg=BORDER, height=1).pack(fill="x", pady=(0, 10))
+        self.theme_panel = tk.Frame(sidebar_footer, bg=SIDEBAR)
+        self.theme_button = tk.Button(
+            sidebar_footer,
+            text=self._theme_button_text(),
+            command=self.open_theme_picker,
+            bg=SIDEBAR, fg=TEXT, activebackground="#EAF5F3", activeforeground=TEXT,
+            relief="flat", bd=0, highlightthickness=0,
+            font=("Segoe UI", 9, "bold"), padx=6, pady=11,
+            cursor="hand2", justify="center", wraplength=102,
+        )
+        self.theme_button.pack(fill="x")
+        self.theme_button.bind("<Enter>", lambda _e: self.theme_button.configure(bg=self.theme_manager.palette["selected"]))
+        self.theme_button.bind("<Leave>", lambda _e: self.theme_button.configure(bg=self.theme_manager.palette["sidebar"]))
 
         work = tk.Frame(shell, bg=BG)
         work.pack(side="left", fill="both", expand=True)
@@ -236,7 +341,7 @@ class MainWindow:
         self.refresh_all()
 
     def _make_nav_button(self, page_id, label):
-        row = tk.Frame(self.sidebar, bg=SIDEBAR, height=49)
+        row = tk.Frame(self.sidebar, bg=SIDEBAR, height=46)
         row.pack(fill="x", padx=1, pady=4)
         row.pack_propagate(False)
         indicator = tk.Frame(row, bg=SIDEBAR, width=3)
@@ -246,7 +351,7 @@ class MainWindow:
             bg=SIDEBAR, fg="#748398", activebackground="#EAF5F3",
             activeforeground=TEXT, relief="flat", bd=0,
             highlightthickness=0, font=("Segoe UI", 9),
-            padx=4, pady=8, cursor="hand2",
+            padx=4, pady=7, cursor="hand2",
             command=lambda key=page_id: self.show_page(key),
         )
         button.pack(side="left", fill="both", expand=True)
@@ -633,11 +738,11 @@ class MovementView(ttk.Frame):
         ttk.Label(row1, text="Buscar texto").grid(row=0, column=0, sticky="w")
         ttk.Entry(row1, textvariable=self.query_var, width=26).grid(row=1, column=0, padx=(0, 9), sticky="ew")
         ttk.Label(row1, text="Cliente").grid(row=0, column=1, sticky="w")
-        self.client_box = ttk.Combobox(row1, textvariable=self.client_var, values=list(self.client_map), state="readonly", width=25)
+        self.client_box = ElegantCombobox(row1, textvariable=self.client_var, values=list(self.client_map), state="readonly", width=25)
         self.client_box.grid(row=1, column=1, padx=(0, 9), sticky="ew")
         ttk.Label(row1, text="Categoría").grid(row=0, column=2, sticky="w")
         category_values = ["Todas las categorías"] + list(self.CATEGORIES)
-        self.category_box = ttk.Combobox(row1, textvariable=self.category_var, values=category_values, state="readonly", width=19)
+        self.category_box = ElegantCombobox(row1, textvariable=self.category_var, values=category_values, state="readonly", width=19)
         self.category_box.grid(row=1, column=2, padx=(0, 9), sticky="ew")
         ttk.Label(row1, text="N.º voucher").grid(row=0, column=3, sticky="w")
         ttk.Entry(row1, textvariable=self.voucher_var, width=17).grid(row=1, column=3, sticky="ew")
@@ -653,10 +758,10 @@ class MovementView(ttk.Frame):
         DatePickerEntry(row2, textvariable=self.to_var, width=12).grid(row=1, column=1, padx=(0, 8), sticky="ew")
         ttk.Label(row2, text="Mes rápido").grid(row=0, column=2, sticky="w")
         month_values = ["Todos los meses"] + [f"{i:02d} - {name}" for i, name in enumerate(self.MONTHS, 1)]
-        self.month_box = ttk.Combobox(row2, textvariable=self.month_var, values=month_values, state="readonly", width=17)
+        self.month_box = ElegantCombobox(row2, textvariable=self.month_var, values=month_values, state="readonly", width=17)
         self.month_box.grid(row=1, column=2, padx=(0, 8), sticky="ew")
         ttk.Label(row2, text="Año").grid(row=0, column=3, sticky="w")
-        self.year_box = ttk.Combobox(row2, textvariable=self.year_var, values=["Todos los años"] + year_values, state="readonly", width=13)
+        self.year_box = ElegantCombobox(row2, textvariable=self.year_var, values=["Todos los años"] + year_values, state="readonly", width=13)
         self.year_box.grid(row=1, column=3, padx=(0, 8), sticky="ew")
         ttk.Button(row2, text="Buscar", style="Accent.TButton", command=self.refresh).grid(row=1, column=4, padx=(0, 7))
         ttk.Button(row2, text="Limpiar", command=self.clear_filters).grid(row=1, column=5)
@@ -969,7 +1074,7 @@ class DebtView(ttk.Frame):
         selectors.pack(fill="x", pady=(14, 12))
         ttk.Label(selectors, text="Cliente").pack(side="left")
         self.client_var = tk.StringVar()
-        self.client_box = ttk.Combobox(selectors, textvariable=self.client_var, state="readonly", width=34)
+        self.client_box = ElegantCombobox(selectors, textvariable=self.client_var, state="readonly", width=34)
         self.client_box.pack(side="left", padx=9)
         self.client_box.bind("<<ComboboxSelected>>", lambda _e: self.refresh())
         ttk.Label(selectors, text="Fecha de corte").pack(side="left", padx=(10, 4))

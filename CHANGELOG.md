@@ -1,5 +1,15 @@
 # Historial de cambios
 
+## [0.6.0] — Refinamiento visual y controles elegantes
+- Se refinó el estilo global de botones, campos de texto, cajas de búsqueda, selectores y tablas con espaciado más cómodo, bordes discretos y estados de foco/hover coherentes en los tres temas.
+- Se incorporó `ElegantCombobox`: los menús desplegables ya no muestran la flecha lateral antigua; toda la barra funciona como superficie de apertura y conserva el desplegable nativo de Tk.
+- El selector de apariencia se trasladó a la parte inferior del menú lateral y ahora se presenta en un panel flotante con muestras visuales de cada tema.
+- Se eliminó el selector de tema de la cabecera, evitando que el texto del tema seleccionado quede resaltado como si estuviera listo para copiar.
+- El menú de Datos pasó a una ventana de acciones limpia, sin flecha de menú desplegable.
+- Se añadieron estados de hover/pressed más suaves, más espacio interior y mayor legibilidad en campos y tablas.
+- Se mantuvieron las paletas Claro premium, Gris suave y Oscuro elegante; la preferencia continúa guardándose por equipo.
+- No se añadieron bibliotecas externas, gráficos acelerados ni dependencias de GPU.
+
 ## [0.5.0] — Calendario modal, reportes y traslado completo
 - Se corrigió el calendario desplegable para que se dibuje dentro del formulario modal sin crear otra ventana ni alterar la captura de foco de Tkinter. La selección devuelve el foco al campo de fecha.
 - Se reforzó el manejo de ventanas premium anidadas y la restauración del foco de la ventana anterior.

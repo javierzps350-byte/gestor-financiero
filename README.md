@@ -1,8 +1,16 @@
 # Gestor Financiero
 
-**Versión 0.5.0** — corrige el calendario en formularios modales, añade exportación filtrada a PDF/Excel/XML/TXT/CSV y paquetes completos de traslado `.gfbak`, además de los temas visuales y el panel interactivo.
+**Versión 0.6.0** — corrige el calendario en formularios modales, añade exportación filtrada a PDF/Excel/XML/TXT/CSV y paquetes completos de traslado `.gfbak`, además de los temas visuales y el panel interactivo.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
+
+## Refinamiento visual 0.6.0
+
+- Campos de texto, búsqueda, botones y tablas con un sistema visual más cuidado: mayor respiración, bordes suaves, estados de foco y hover discretos, sin neón ni efectos llamativos.
+- Los selectores de cliente, categoría, mes, año y método de pago ya no muestran una flecha lateral; toda la barra abre la lista.
+- El selector de temas está en la parte inferior del menú lateral y se abre como panel flotante visual. La cabecera ya no contiene un selector de texto, evitando la selección persistente del nombre del tema.
+- El acceso a las herramientas de datos abre un panel de acciones en lugar de un menú nativo con flecha.
+- Se mantienen los tres temas y la preferencia visual guardada.
 
 ## Incluye en esta versión
 

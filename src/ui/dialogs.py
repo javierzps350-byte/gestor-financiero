@@ -9,6 +9,7 @@ from src.services.finance_service import (
 )
 from src.services.evidence_service import attach_evidence, find_recent_downloads
 from src.ui.date_picker import DatePickerEntry
+from src.ui.widgets import ElegantCombobox
 from src.ui.premium import messagebox, palette_for, PremiumWindow
 
 
@@ -182,7 +183,7 @@ class RateDialog(BaseDialog):
         self.client_map = {f'{c["id"]} — {c["name"]}': c["id"] for c in self.clients}
         initial_key = next((key for key, value in self.client_map.items() if value == initial_client_id), None)
         self.client_var = tk.StringVar(value=initial_key or next(iter(self.client_map), ""))
-        self.client_box = ttk.Combobox(body, textvariable=self.client_var, values=list(self.client_map), state="readonly")
+        self.client_box = ElegantCombobox(body, textvariable=self.client_var, values=list(self.client_map), state="readonly")
         self.client_box.pack(fill="x")
         self.amount_var = tk.StringVar()
         self.date_var = tk.StringVar(value=date.today().isoformat())
@@ -236,7 +237,7 @@ class MovementDialog(BaseDialog):
         ttk.Label(body, text=title, style="DialogTitle.TLabel").pack(anchor="w", pady=(0, 12))
         if direction == "income":
             ttk.Label(body, text="Cliente registrado (opcional)").pack(anchor="w", pady=(5, 3))
-            self.client_box = ttk.Combobox(body, textvariable=self.vars["client"], values=list(self.client_map), state="readonly")
+            self.client_box = ElegantCombobox(body, textvariable=self.vars["client"], values=list(self.client_map), state="readonly")
             self.client_box.pack(fill="x")
             self.client_box.bind("<<ComboboxSelected>>", self._client_selected)
         self._field(body, "Persona / empresa *", "counterparty")
@@ -244,10 +245,10 @@ class MovementDialog(BaseDialog):
         self._field(body, "Importe recibido o pagado *", "amount")
         self._field(body, "Fecha del pago *", "date")
         ttk.Label(body, text="Tipo de pago *").pack(anchor="w", pady=(9, 3))
-        ttk.Combobox(body, textvariable=self.vars["method"], values=self.METHODS, state="readonly").pack(fill="x")
+        ElegantCombobox(body, textvariable=self.vars["method"], values=self.METHODS, state="readonly").pack(fill="x")
         if direction == "expense":
             ttk.Label(body, text="Categoría del gasto *").pack(anchor="w", pady=(9, 3))
-            ttk.Combobox(
+            ElegantCombobox(
                 body, textvariable=self.vars["category"], values=self.EXPENSE_CATEGORIES,
                 state="readonly",
             ).pack(fill="x")

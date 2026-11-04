@@ -123,3 +123,11 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 - Las siguientes entregas deben aplicarse sobre este mismo historial, publicarse como commits en `origin/master` y recibirse mediante actualización incremental. No volver a entregar ZIP completos salvo para recuperación o instalación inicial.
 - El conector de GitHub disponible en el entorno de desarrollo no tiene acceso confirmado al repositorio privado; cuando no exista ese acceso, entregar un parche Git verificable para que el usuario lo aplique y publique.
 - Pendiente: integrar la comprobación/aplicación de actualizaciones dentro de la aplicación y eliminar la consola visible del flujo normal de actualización. El acceso directo de uso diario debe arrancar con `pythonw.exe` o el ejecutable empaquetado, nunca con una consola.
+
+
+## Estado visual v0.6.0
+- Los controles `ttk` usan estilos de campos y botones refinados y coherentes con el tema activo.
+- Todos los selectores de la interfaz se implementan mediante `src.ui.widgets.ElegantCombobox`, que elimina visualmente la flecha lateral y abre el popdown al hacer clic en toda la barra.
+- El selector de temas vive en la parte inferior del sidebar, abre un panel flotante y actualiza el tema sin un `Combobox` editable/seleccionable.
+- El menú de Datos usa un panel de acciones sin flecha lateral.
+- No cambiar la persistencia de `data/ui_preferences.json` ni el motor financiero al continuar refinando la UI.
