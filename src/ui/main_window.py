@@ -13,7 +13,7 @@ from src.config import APP_NAME, BACKUP_DIR, EVIDENCE_DIR
 from src.database.connection import connect
 from src.domain.money import format_money
 from src.services.finance_service import (
-    client_debt_summary, client_payment_history, dashboard_summary,
+    client_debt_summary, client_payment_history, dashboard_visual_data,
     list_client_charges, list_clients, search_movements, set_client_active,
     void_movement,
 )
@@ -21,24 +21,26 @@ from src.services.evidence_service import evidence_absolute_path
 from src.services.report_service import export_debts_csv, export_movements_csv
 from src.ui.dialogs import ClientDialog, MovementDialog, RateDialog
 from src.ui.assistant_view import AssistantView
+from src.ui.charts import MonthlyLineChart, ExpenseDonutChart, TEAL, CORAL
 
-BG = "#0B1220"
-PANEL = "#131F31"
-PANEL_ALT = "#1B2A40"
-TEXT = "#EDF2FA"
-MUTED = "#94A3B8"
-ACCENT = "#62B8E8"
-GREEN = "#4CC6A2"
-RED = "#EF7D83"
-BORDER = "#26374E"
-SIDEBAR = "#0E1929"
+BG = "#F2F6FA"
+PANEL = "#FFFFFF"
+PANEL_ALT = "#EEF3F7"
+TEXT = "#243449"
+MUTED = "#8190A2"
+ACCENT = "#2BAE9B"
+GREEN = "#2BAE9B"
+RED = "#E9897D"
+BORDER = "#E1E8EF"
+SIDEBAR = "#FFFFFF"
+WHITE = "#FFFFFF"
 
 
 class MainWindow:
     """Main application shell with lightweight animated page navigation."""
 
     NAV_ITEMS = [
-        ("dashboard", "Inicio"),
+        ("dashboard", "Resumen"),
         ("incomes", "Ingresos"),
         ("expenses", "Gastos"),
         ("clients", "Clientes"),
@@ -55,10 +57,10 @@ class MainWindow:
         root.title(APP_NAME)
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
-        window_width = min(1280, max(980, screen_width - 60))
-        window_height = min(820, max(660, screen_height - 80))
-        root.geometry(f"{window_width}x{window_height}+30+25")
-        root.minsize(min(980, window_width), min(660, window_height))
+        window_width = min(1440, max(960, screen_width - 40))
+        window_height = min(920, max(680, screen_height - 60))
+        root.geometry(f"{window_width}x{window_height}+20+15")
+        root.minsize(min(940, window_width), min(660, window_height))
         root.configure(bg=BG)
         self._configure_style()
         self._build_shell()
@@ -66,7 +68,6 @@ class MainWindow:
     def _configure_style(self):
         style = ttk.Style(self.root)
         style.theme_use("clam")
-
         style.configure("TFrame", background=BG)
         style.configure("Panel.TFrame", background=PANEL)
         style.configure("TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 10))
@@ -76,72 +77,39 @@ class MainWindow:
         style.configure("Hint.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
         style.configure("Title.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 21, "bold"))
         style.configure("SubTitle.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
-
-        style.configure(
-            "TButton", font=("Segoe UI", 9), padding=(13, 8),
-            background=PANEL_ALT, foreground=TEXT, borderwidth=0,
-        )
-        style.map(
-            "TButton",
-            background=[("active", "#2A405C"), ("disabled", "#202A38")],
-            foreground=[("disabled", "#65758A")],
-        )
-        style.configure(
-            "Accent.TButton", background=ACCENT, foreground="#081523",
-            font=("Segoe UI", 9, "bold"), padding=(14, 9),
-        )
-        style.map("Accent.TButton", background=[("active", "#83CFF2")])
-        style.configure(
-            "TEntry", fieldbackground=PANEL, foreground=TEXT,
-            insertcolor=TEXT, bordercolor=BORDER, padding=9,
-        )
-        style.configure(
-            "TCombobox", fieldbackground=PANEL, background=PANEL,
-            foreground=TEXT, arrowcolor=TEXT, padding=8,
-        )
-        style.map(
-            "TCombobox", fieldbackground=[("readonly", PANEL)],
-            foreground=[("readonly", TEXT)],
-        )
+        style.configure("TButton", font=("Segoe UI", 9), padding=(13, 8), background=PANEL_ALT, foreground=TEXT, borderwidth=0)
+        style.map("TButton", background=[("active", "#E4EDF4"), ("disabled", "#F0F3F6")], foreground=[("disabled", "#AAB4BF")])
+        style.configure("Accent.TButton", background=ACCENT, foreground="#FFFFFF", font=("Segoe UI", 9, "bold"), padding=(14, 9))
+        style.map("Accent.TButton", background=[("active", "#239987")])
+        style.configure("TEntry", fieldbackground=PANEL, foreground=TEXT, insertcolor=TEXT, bordercolor=BORDER, padding=9)
+        style.configure("TCombobox", fieldbackground=PANEL, background=PANEL, foreground=TEXT, arrowcolor=MUTED, padding=8)
+        style.map("TCombobox", fieldbackground=[("readonly", PANEL)], foreground=[("readonly", TEXT)])
         style.configure("TCheckbutton", background=BG, foreground=TEXT, font=("Segoe UI", 9))
         style.map("TCheckbutton", background=[("active", BG)])
-        style.configure(
-            "Treeview", background=PANEL, fieldbackground=PANEL,
-            foreground=TEXT, rowheight=36, borderwidth=0,
-            font=("Segoe UI", 9),
-        )
-        style.configure(
-            "Treeview.Heading", background=PANEL_ALT, foreground="#C9D5E5",
-            relief="flat", font=("Segoe UI", 9, "bold"), padding=(11, 10),
-        )
-        style.map("Treeview", background=[("selected", "#244B70")], foreground=[("selected", "#FFFFFF")])
-        style.configure("TScrollbar", background=PANEL, troughcolor=BG, bordercolor=BG, arrowcolor=MUTED)
+        style.configure("Treeview", background=PANEL, fieldbackground=PANEL, foreground=TEXT, rowheight=31, borderwidth=0, font=("Segoe UI", 9))
+        style.configure("Treeview.Heading", background="#F3F6F9", foreground="#657489", relief="flat", font=("Segoe UI", 8, "bold"), padding=(10, 10))
+        style.map("Treeview", background=[("selected", "#D9F0EC")], foreground=[("selected", TEXT)])
+        style.configure("TScrollbar", background="#E7EDF3", troughcolor=BG, bordercolor=BG, arrowcolor=MUTED)
 
     def _build_shell(self):
-        # Minimal header: brand only, without decorative status labels.
-        top = tk.Frame(self.root, bg="#101A2A", height=68, padx=25)
+        top = tk.Frame(self.root, bg=WHITE, height=66, padx=28)
         top.pack(fill="x")
         top.pack_propagate(False)
-        tk.Label(
-            top, text="Gestor financiero", bg="#101A2A", fg=TEXT,
-            font=("Segoe UI", 16, "bold"),
-        ).pack(side="left", anchor="center")
+        tk.Label(top, text="Gestor Financiero", bg=WHITE, fg=TEXT, font=("Segoe UI", 16, "bold")).pack(side="left", anchor="center")
         tk.Frame(self.root, bg=BORDER, height=1).pack(fill="x")
 
         shell = tk.Frame(self.root, bg=BG)
         shell.pack(fill="both", expand=True)
-
-        self.sidebar = tk.Frame(shell, bg=SIDEBAR, width=205, padx=10, pady=18)
+        self.sidebar = tk.Frame(shell, bg=SIDEBAR, width=112, padx=8, pady=20, highlightthickness=1, highlightbackground=BORDER)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
-
         for page_id, label in self.NAV_ITEMS:
             self._make_nav_button(page_id, label)
 
         work = tk.Frame(shell, bg=BG)
         work.pack(side="left", fill="both", expand=True)
         self.page_host = tk.Frame(work, bg=BG)
-        self.page_host.pack(fill="both", expand=True, padx=(18, 22), pady=18)
+        self.page_host.pack(fill="both", expand=True, padx=(17, 20), pady=14)
 
         self.dashboard = DashboardView(self.page_host, self.refresh_all)
         self.incomes = MovementView(self.page_host, "income", "Ingresos")
@@ -159,7 +127,6 @@ class MainWindow:
             "search": self.search,
             "assistant": self.assistant,
         }
-
         self.root.bind("<Control-1>", lambda _e: self.show_page("dashboard"))
         self.root.bind("<Control-2>", lambda _e: self.show_page("incomes"))
         self.root.bind("<Control-3>", lambda _e: self.show_page("expenses"))
@@ -167,22 +134,21 @@ class MainWindow:
         self.root.bind("<Control-5>", lambda _e: self.show_page("debts"))
         self.root.bind("<Control-6>", lambda _e: self.show_page("search"))
         self.root.bind("<Control-7>", lambda _e: self.show_page("assistant"))
-
         self.show_page("dashboard", animate=False)
         self.refresh_all()
 
     def _make_nav_button(self, page_id, label):
-        row = tk.Frame(self.sidebar, bg=SIDEBAR, height=44)
-        row.pack(fill="x", padx=3, pady=3)
+        row = tk.Frame(self.sidebar, bg=SIDEBAR, height=49)
+        row.pack(fill="x", padx=1, pady=4)
         row.pack_propagate(False)
         indicator = tk.Frame(row, bg=SIDEBAR, width=3)
         indicator.pack(side="left", fill="y")
         button = tk.Button(
-            row, text=label, anchor="w",
-            bg=SIDEBAR, fg="#AAB7C9", activebackground="#203550",
+            row, text=label, anchor="center",
+            bg=SIDEBAR, fg="#748398", activebackground="#EAF5F3",
             activeforeground=TEXT, relief="flat", bd=0,
-            highlightthickness=0, font=("Segoe UI", 10),
-            padx=16, pady=9, cursor="hand2",
+            highlightthickness=0, font=("Segoe UI", 9),
+            padx=4, pady=8, cursor="hand2",
             command=lambda key=page_id: self.show_page(key),
         )
         button.pack(side="left", fill="both", expand=True)
@@ -194,19 +160,19 @@ class MainWindow:
         if page_id == self.current_page:
             return
         row, _indicator, button = self._nav_widgets[page_id]
-        color = "#17283D" if hovered else SIDEBAR
+        color = "#F1F7F6" if hovered else SIDEBAR
         row.configure(bg=color)
         button.configure(bg=color)
 
     def _set_nav_active(self, page_id):
         for key, (row, indicator, button) in self._nav_widgets.items():
             active = key == page_id
-            bg = "#1B3049" if active else SIDEBAR
+            bg = "#E5F4F1" if active else SIDEBAR
             row.configure(bg=bg)
             indicator.configure(bg=ACCENT if active else SIDEBAR)
             button.configure(
                 bg=bg,
-                fg="#FFFFFF" if active else "#A8B6C9",
+                fg="#208E80" if active else "#748398",
                 font=("Segoe UI", 10, "bold" if active else "normal"),
             )
 
@@ -257,141 +223,225 @@ class MainWindow:
 
 
 class DashboardView(ttk.Frame):
+    """Dashboard inspired by a clean finance workspace, with interactive charts."""
+
     def __init__(self, parent, refresh_callback):
-        super().__init__(parent, padding=20)
+        super().__init__(parent, padding=4)
         self.refresh_callback = refresh_callback
-        self._shown_values = {key: 0 for key in ("income", "expenses", "net", "overdue")}
+        self.chart_month = date.today().strftime("%Y-%m")
+        self.table_month = None
+        self.selected_category = None
+        self._shown_values = {"balance": 0, "income": 0, "expenses": 0}
         self._animation_ids = {}
+        self._build()
 
+    def _panel(self, parent, **kwargs):
+        return tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=BORDER, **kwargs)
+
+    def _build(self):
         heading = tk.Frame(self, bg=BG)
-        heading.pack(fill="x", pady=(0, 22))
-        tk.Label(
-            heading, text="Resumen general", bg=BG, fg=TEXT,
-            font=("Segoe UI", 23, "bold"),
-        ).pack(anchor="w")
-        tk.Label(
-            heading, text="Ingresos, gastos y cuentas pendientes.",
-            bg=BG, fg=MUTED, font=("Segoe UI", 10),
-        ).pack(anchor="w", pady=(5, 0))
+        heading.pack(fill="x", pady=(0, 9))
+        title_block = tk.Frame(heading, bg=BG)
+        title_block.pack(side="left", fill="x", expand=True)
+        tk.Label(title_block, text="Hola, bienvenido", bg=BG, fg=TEXT, font=("Segoe UI", 19, "bold")).pack(anchor="w")
+        tk.Label(title_block, text="Este es el resumen de tu actividad financiera.", bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 0))
+        weekday_names = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+        month_names = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+        today = date.today()
+        date_label = f"{weekday_names[today.weekday()].capitalize()}, {today.day} de {month_names[today.month - 1]} de {today.year}"
+        tk.Label(heading, text=date_label, bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(side="right", anchor="e", pady=(10, 0))
 
-        self.cards = tk.Frame(self, bg=BG)
-        self.cards.pack(fill="x")
+        cards = tk.Frame(self, bg=BG)
+        cards.pack(fill="x", pady=(0, 9))
+        cards.grid_columnconfigure((0, 1, 2), weight=1, uniform="top_cards")
         self.card_values = {}
         card_specs = [
-            ("income", "Ingresos del mes", GREEN, "Dinero recibido"),
-            ("expenses", "Gastos del mes", RED, "Dinero pagado"),
-            ("net", "Balance del mes", ACCENT, "Ingresos menos gastos"),
-            ("overdue", "Deuda vencida", "#E8B86D", "Cuotas fuera de fecha"),
+            ("balance", "Saldo actual", "Balance de movimientos registrados", "#4E98BA"),
+            ("income", "Ingresos del mes", "Total recibido este mes", TEAL),
+            ("expenses", "Egresos del mes", "Total pagado este mes", CORAL),
         ]
-        for index, (key, label, color, caption) in enumerate(card_specs):
-            card = tk.Frame(
-                self.cards, bg=PANEL, padx=17, pady=16,
-                highlightthickness=1, highlightbackground=BORDER,
-            )
-            card.grid(
-                row=0, column=index, sticky="nsew",
-                padx=(0 if index == 0 else 7, 0 if index == 3 else 7),
-            )
-            self.cards.grid_columnconfigure(index, weight=1, uniform="summary")
-            tk.Frame(card, bg=color, height=3).pack(fill="x", side="top", pady=(0, 15))
-            tk.Label(
-                card, text=label.upper(), bg=PANEL, fg=MUTED,
-                font=("Segoe UI", 8, "bold"),
-            ).pack(anchor="w")
-            value = tk.Label(
-                card, text="$0,00", bg=PANEL, fg=TEXT,
-                font=("Segoe UI", 20, "bold"),
-            )
-            value.pack(anchor="w", pady=(10, 4))
-            tk.Label(
-                card, text=caption, bg=PANEL, fg="#8292A8",
-                font=("Segoe UI", 8),
-            ).pack(anchor="w")
+        for column, (key, label, subtitle, color) in enumerate(card_specs):
+            card = self._panel(cards, padx=14, pady=10)
+            card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 7, 0 if column == 2 else 7))
+            accent = tk.Frame(card, bg=color, width=4)
+            accent.pack(side="left", fill="y", padx=(0, 13))
+            body = tk.Frame(card, bg=PANEL)
+            body.pack(side="left", fill="both", expand=True)
+            tk.Label(body, text=label, bg=PANEL, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w")
+            value = tk.Label(body, text="$0,00", bg=PANEL, fg=TEXT, font=("Segoe UI", 19, "bold"))
+            value.pack(anchor="w", pady=(6, 2))
+            tk.Label(body, text=subtitle, bg=PANEL, fg="#99A5B3", font=("Segoe UI", 8)).pack(anchor="w")
             self.card_values[key] = value
 
-        lower = tk.Frame(self, bg=BG)
-        lower.pack(fill="both", expand=True, pady=(20, 0))
-        activity = tk.Frame(
-            lower, bg=PANEL, padx=21, pady=20,
-            highlightthickness=1, highlightbackground=BORDER,
-        )
-        activity.pack(side="left", fill="both", expand=True)
-        tk.Label(
-            activity, text="Resumen de clientes", bg=PANEL,
-            fg=TEXT, font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w")
-        tk.Frame(activity, bg=BORDER, height=1).pack(fill="x", pady=(14, 16))
+        charts = tk.Frame(self, bg=BG)
+        charts.pack(fill="x", pady=(0, 8))
+        charts.grid_columnconfigure(0, weight=6, uniform="charts")
+        charts.grid_columnconfigure(1, weight=5, uniform="charts")
+        charts.grid_rowconfigure(0, weight=1)
 
-        client_metrics = tk.Frame(activity, bg=PANEL)
-        client_metrics.pack(fill="x", anchor="n")
-        client_metrics.grid_columnconfigure(0, weight=1, uniform="client_metrics")
-        client_metrics.grid_columnconfigure(1, weight=1, uniform="client_metrics")
+        line_card = self._panel(charts, padx=13, pady=9)
+        line_card.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
+        line_heading = tk.Frame(line_card, bg=PANEL)
+        line_heading.pack(fill="x")
+        tk.Label(line_heading, text="Evolución del balance mensual", bg=PANEL, fg=TEXT, font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        tk.Label(line_heading, text="Ingresos y gastos · últimos 12 meses", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w", pady=(2, 0))
+        self.line_chart = MonthlyLineChart(line_card, self._select_month, height=150)
+        self.line_chart.pack(fill="both", expand=True, pady=(3, 0))
 
-        active_card = tk.Frame(
-            client_metrics, bg="#192A40", padx=18, pady=17,
-            highlightthickness=1, highlightbackground="#2A3C54",
-        )
-        active_card.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
-        tk.Label(
-            active_card, text="CLIENTES ACTIVOS", bg="#192A40", fg=MUTED,
-            font=("Segoe UI", 8, "bold"),
-        ).pack(anchor="w")
-        self.active_clients_value = tk.Label(
-            active_card, text="0", bg="#192A40", fg=TEXT,
-            font=("Segoe UI", 25, "bold"),
-        )
-        self.active_clients_value.pack(anchor="w", pady=(9, 0))
+        donut_card = self._panel(charts, padx=13, pady=9)
+        donut_card.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
+        donut_heading = tk.Frame(donut_card, bg=PANEL)
+        donut_heading.pack(fill="x")
+        tk.Label(donut_heading, text="Distribución de gastos por categoría", bg=PANEL, fg=TEXT, font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        self.category_period_label = tk.Label(donut_heading, text="Este mes", bg=PANEL, fg=MUTED, font=("Segoe UI", 8))
+        self.category_period_label.pack(anchor="w", pady=(2, 0))
+        self.donut_chart = ExpenseDonutChart(donut_card, self._select_category, height=150)
+        self.donut_chart.pack(fill="both", expand=True, pady=(3, 0))
 
-        overdue_card = tk.Frame(
-            client_metrics, bg="#192A40", padx=18, pady=17,
-            highlightthickness=1, highlightbackground="#2A3C54",
-        )
-        overdue_card.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
-        tk.Label(
-            overdue_card, text="CLIENTES CON DEUDA VENCIDA", bg="#192A40", fg=MUTED,
-            font=("Segoe UI", 8, "bold"),
-        ).pack(anchor="w")
-        self.overdue_clients_value = tk.Label(
-            overdue_card, text="0", bg="#192A40", fg="#E8B86D",
-            font=("Segoe UI", 25, "bold"),
-        )
-        self.overdue_clients_value.pack(anchor="w", pady=(9, 0))
+        actions = tk.Frame(self, bg=BG)
+        actions.pack(fill="x", pady=(0, 8))
+        self._action_button(actions, "Registrar pago recibido", self._new_income, TEAL).pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self._action_button(actions, "Registrar pago realizado", self._new_expense, CORAL).pack(side="left", fill="x", expand=True, padx=(6, 0))
 
-        actions = tk.Frame(lower, bg=BG, width=222, padx=16)
-        actions.pack(side="right", fill="y")
-        actions.pack_propagate(False)
-        tk.Label(
-            actions, text="Acciones rápidas", bg=BG, fg=MUTED,
-            font=("Segoe UI", 9, "bold"),
-        ).pack(anchor="w", pady=(3, 12))
-        self._action_button(actions, "Registrar ingreso", lambda: self._new("income"), primary=True).pack(fill="x", pady=4)
-        self._action_button(actions, "Registrar gasto", lambda: self._new("expense")).pack(fill="x", pady=4)
-        self._action_button(actions, "Nuevo cliente", self._new_client).pack(fill="x", pady=4)
-        tk.Frame(actions, bg=BORDER, height=1).pack(fill="x", pady=13)
-        self._action_button(actions, "Crear copia de seguridad", self.backup).pack(fill="x", pady=4)
-        self._action_button(actions, "Actualizar resumen", self.refresh).pack(fill="x", pady=4)
+        recent = self._panel(self, padx=12, pady=7)
+        recent.pack(fill="both", expand=True)
+        recent_header = tk.Frame(recent, bg=PANEL)
+        recent_header.pack(fill="x", pady=(0, 8))
+        tk.Label(recent_header, text="Últimos movimientos", bg=PANEL, fg=TEXT, font=("Segoe UI", 10, "bold")).pack(side="left")
+        self.filter_label = tk.Label(recent_header, text="", bg=PANEL, fg=MUTED, font=("Segoe UI", 8))
+        self.filter_label.pack(side="left", padx=(10, 0))
+        tk.Button(recent_header, text="Limpiar filtros", command=self.clear_filters, bg=PANEL, fg=ACCENT, activebackground=PANEL, activeforeground=ACCENT, relief="flat", bd=0, font=("Segoe UI", 8, "bold"), cursor="hand2").pack(side="right")
+
+        table_wrap = tk.Frame(recent, bg=PANEL)
+        table_wrap.pack(fill="both", expand=True)
+        columns = ("date", "description", "category", "type", "amount")
+        self.recent_tree = ttk.Treeview(table_wrap, columns=columns, show="headings", height=2, selectmode="browse")
+        for key, label, width, anchor in [
+            ("date", "Fecha", 105, "center"),
+            ("description", "Descripción", 260, "w"),
+            ("category", "Categoría", 145, "w"),
+            ("type", "Tipo", 105, "center"),
+            ("amount", "Monto", 120, "e"),
+        ]:
+            self.recent_tree.heading(key, text=label)
+            self.recent_tree.column(key, width=width, minwidth=65, anchor=anchor, stretch=key == "description")
+        scrollbar = ttk.Scrollbar(table_wrap, orient="vertical", command=self.recent_tree.yview)
+        self.recent_tree.configure(yscrollcommand=scrollbar.set)
+        self.recent_tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        self.recent_tree.tag_configure("income", foreground="#208F7E")
+        self.recent_tree.tag_configure("expense", foreground="#D9776B")
+        self.recent_tree.tag_configure("void", foreground="#A5AFBA")
+
 
     @staticmethod
-    def _action_button(parent, text, command, primary=False):
-        bg = ACCENT if primary else PANEL_ALT
-        fg = "#081523" if primary else TEXT
-        hover = "#83CFF2" if primary else "#2A405C"
+    def _action_button(parent, text, command, color):
         button = tk.Button(
-            parent, text=text, command=command, anchor="w",
-            bg=bg, fg=fg, activebackground=hover, activeforeground=fg,
+            parent, text=text, command=command, anchor="center",
+            bg=color, fg=WHITE, activebackground=color, activeforeground=WHITE,
             relief="flat", bd=0, highlightthickness=0,
-            padx=14, pady=12, font=("Segoe UI", 9, "bold" if primary else "normal"),
-            cursor="hand2",
+            padx=17, pady=10, font=("Segoe UI", 9, "bold"), cursor="hand2",
         )
-        button.bind("<Enter>", lambda _e: button.configure(bg=hover))
-        button.bind("<Leave>", lambda _e: button.configure(bg=bg))
+        hover = "#238F80" if color == TEAL else "#D9786D"
+        button.bind("<Enter>", lambda _event: button.configure(bg=hover))
+        button.bind("<Leave>", lambda _event: button.configure(bg=color))
         return button
 
-    def _new(self, direction):
-        MovementDialog(self, direction, self.refresh_callback)
+    def _new_income(self):
+        MovementDialog(self, "income", self.refresh_callback)
 
-    def _new_client(self):
-        ClientDialog(self, self.refresh_callback)
+    def _new_expense(self):
+        MovementDialog(self, "expense", self.refresh_callback)
+
+    def _select_month(self, month: str):
+        self.chart_month = month
+        self.table_month = month
+        self.selected_category = None
+        self.refresh()
+
+    def _select_category(self, category: str):
+        if self.selected_category == category:
+            self.selected_category = None
+        else:
+            self.selected_category = category
+        self.table_month = self.chart_month
+        self.refresh()
+
+    def clear_filters(self):
+        self.chart_month = date.today().strftime("%Y-%m")
+        self.table_month = None
+        self.selected_category = None
+        self.refresh()
+
+    def _animate_value(self, key, amount, color):
+        old_after = self._animation_ids.pop(key, None)
+        if old_after is not None:
+            try:
+                self.after_cancel(old_after)
+            except tk.TclError:
+                pass
+        start = int(self._shown_values.get(key, 0))
+        target = int(amount)
+        steps = 10
+        def tick(step=1):
+            value = int(start + (target - start) * step / steps)
+            self.card_values[key].configure(text=format_money(value), fg=color)
+            self._shown_values[key] = value
+            if step < steps:
+                self._animation_ids[key] = self.after(17, lambda: tick(step + 1))
+            else:
+                self._animation_ids.pop(key, None)
+                self._shown_values[key] = target
+        tick()
+
+    def refresh(self):
+        try:
+            data = dashboard_visual_data(
+                chart_month=self.chart_month,
+                table_month=self.table_month,
+                category=self.selected_category,
+            )
+            targets = {
+                "balance": (data["balance_cents"], "#314D64" if data["balance_cents"] >= 0 else RED),
+                "income": (data["income_month_cents"], TEAL),
+                "expenses": (data["expenses_month_cents"], CORAL),
+            }
+            for key, (amount, color) in targets.items():
+                self._animate_value(key, amount, color)
+            self.line_chart.set_data(data["series"], self.chart_month)
+            self.donut_chart.set_data(data["categories"], self.selected_category)
+            self.category_period_label.configure(text=self._month_label(self.chart_month))
+            self.recent_tree.delete(*self.recent_tree.get_children())
+            for row in data["recent"]:
+                is_income = row["direction"] == "income"
+                amount = int(row["amount_cents"])
+                amount_text = format_money(amount) if is_income else f"-{format_money(amount)}"
+                description = row["reason"] or row["counterparty"]
+                self.recent_tree.insert(
+                    "", "end", iid=str(row["id"]),
+                    values=(
+                        row["payment_date"], description, row.get("category") or ("Ingresos" if is_income else "Otros"),
+                        row["payment_method"], amount_text,
+                    ),
+                    tags=("income" if is_income else "expense",),
+                )
+            label_parts = []
+            if self.table_month:
+                label_parts.append(self._month_label(self.table_month))
+            if self.selected_category:
+                label_parts.append(self.selected_category)
+            self.filter_label.configure(text=" · ".join(label_parts))
+        except Exception as exc:
+            messagebox.showerror("No se pudo cargar el resumen", str(exc), parent=self)
+
+    @staticmethod
+    def _month_label(month: str) -> str:
+        names = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+        try:
+            year, number = (int(part) for part in month.split("-"))
+            return f"{names[number - 1].capitalize()} {year}"
+        except (ValueError, IndexError):
+            return month
 
     def backup(self):
         try:
@@ -416,49 +466,6 @@ class DashboardView(ttk.Frame):
             messagebox.showinfo("Copia creada", f"La copia de seguridad incluye la base de datos y las evidencias:\n{destination}", parent=self)
         except Exception as exc:
             messagebox.showerror("Error de copia", str(exc), parent=self)
-
-    def _animate_card(self, key, target_cents, color):
-        previous_after = self._animation_ids.pop(key, None)
-        if previous_after is not None:
-            try:
-                self.after_cancel(previous_after)
-            except tk.TclError:
-                pass
-        start = self._shown_values.get(key, 0)
-        steps = 12
-
-        def tick(step=1):
-            value = int(start + (target_cents - start) * step / steps)
-            self.card_values[key].configure(text=format_money(value), fg=color)
-            self._shown_values[key] = value
-            if step < steps:
-                self._animation_ids[key] = self.after(16, lambda: tick(step + 1))
-            else:
-                self._animation_ids.pop(key, None)
-                self._shown_values[key] = target_cents
-
-        tick()
-
-    def refresh(self):
-        try:
-            summary = dashboard_summary()
-            targets = {
-                "income": (summary["income_month_cents"], GREEN),
-                "expenses": (summary["expenses_month_cents"], RED),
-                "net": (summary["net_month_cents"], TEXT),
-                "overdue": (summary["overdue_total_cents"], "#E8B86D" if summary["overdue_total_cents"] else TEXT),
-            }
-            for key, (amount, color) in targets.items():
-                self._animate_card(key, int(amount), color)
-            self.active_clients_value.configure(text=str(summary["active_clients"]))
-            self.overdue_clients_value.configure(
-                text=str(summary["clients_with_due_charges"]),
-                fg="#E8B86D" if summary["clients_with_due_charges"] else TEXT,
-            )
-        except Exception as exc:
-            self.active_clients_value.configure(text="—")
-            self.overdue_clients_value.configure(text="—")
-            messagebox.showerror("No se pudo cargar el resumen", str(exc), parent=self)
 
 
 class MovementView(ttk.Frame):
@@ -493,18 +500,18 @@ class MovementView(ttk.Frame):
 
         table_frame = ttk.Frame(self)
         table_frame.pack(fill="both", expand=True)
-        columns = ("date", "registered", "type", "person", "reason", "amount", "method", "voucher", "evidence", "status")
+        columns = ("date", "registered", "type", "person", "reason", "category", "amount", "method", "voucher", "evidence", "status")
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
         headings = {
             "date": ("Fecha de pago", 100), "registered": ("Fecha de registro", 135),
             "type": ("Movimiento", 90), "person": ("Persona / empresa", 155),
-            "reason": ("Motivo", 195), "amount": ("Importe", 100),
+            "reason": ("Motivo", 175), "category": ("Categoría", 115), "amount": ("Importe", 100),
             "method": ("Tipo de pago", 115), "voucher": ("Voucher", 115),
             "evidence": ("Evidencias", 75), "status": ("Estado", 85),
         }
         for key, (label, width) in headings.items():
             self.tree.heading(key, text=label)
-            self.tree.column(key, width=width, minwidth=60, anchor="w" if key in ("person", "reason") else "center")
+            self.tree.column(key, width=width, minwidth=60, anchor="w" if key in ("person", "reason", "category") else "center")
         yscroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         xscroll = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
@@ -546,7 +553,8 @@ class MovementView(ttk.Frame):
                 self.tree.insert("", "end", iid=str(row["id"]), values=(
                     row["payment_date"], row["registered_at"],
                     "Ingreso" if row["direction"] == "income" else "Gasto",
-                    row["counterparty"], row["reason"], format_money(row["amount_cents"]), row["payment_method"],
+                    row["counterparty"], row["reason"], row.get("category") or "Otros",
+                    format_money(row["amount_cents"]), row["payment_method"],
                     row["voucher_number"] or "—", row["evidence_count"], state,
                 ), tags=("void",) if row["status"] == "void" else ())
         except Exception as exc:
@@ -579,7 +587,7 @@ class MovementView(ttk.Frame):
         frame = ttk.Frame(dialog, padding=16)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="Selecciona el archivo que deseas abrir:").pack(anchor="w", pady=(0, 10))
-        listing = tk.Listbox(frame, bg=PANEL, fg=TEXT, selectbackground="#244B70", relief="flat", font=("Segoe UI", 9))
+        listing = tk.Listbox(frame, bg=PANEL, fg=TEXT, selectbackground="#D9F0EC", relief="flat", font=("Segoe UI", 9))
         listing.pack(fill="both", expand=True)
         for row in rows:
             listing.insert("end", row["original_name"])

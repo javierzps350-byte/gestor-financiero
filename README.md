@@ -1,10 +1,17 @@
 # Gestor Financiero
 
-**Versión 0.2.1** — incorpora un agente financiero local para consultar y administrar el programa mediante instrucciones escritas o, con el módulo opcional, por voz.
+**Versión 0.3.0** — incorpora un agente financiero local para consultar y administrar el programa mediante instrucciones escritas o, con el módulo opcional, por voz.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 
 ## Incluye en esta versión
+
+- Dashboard financiero claro con tarjetas de saldo acumulado, ingresos y egresos del mes.
+- Gráfica de líneas interactiva de los últimos 12 meses; hover muestra importes exactos, click en un mes filtra la tabla y la gráfica de categorías.
+- Gráfica de anillo interactiva por categoría de gasto; al seleccionar una porción o su leyenda se filtran los movimientos.
+- Tabla de movimientos recientes con fecha, descripción, categoría, tipo de pago e importe.
+- Categorías para gastos: Hogar, Comida, Transporte, Entretenimiento, Salud, Educación, Servicios, Compras, Negocio y Otros. Los movimientos anteriores a esta función se conservan bajo “Otros”.
+- Los gráficos se dibujan con Canvas de Tkinter y no agregan dependencias externas ni requieren GPU.
 
 - Interfaz depurada con navegación lateral de texto, sin iconos decorativos.
 - Se eliminaron etiquetas de estado, mensajes promocionales y textos técnicos redundantes de la pantalla principal.
@@ -81,6 +88,14 @@ La base de datos y los comprobantes se guardan en `data/` durante el desarrollo.
 El resultado estará en `dist/GestorFinanciero/`. Para generar el instalador Setup.exe, abre `installer/installer_windows.iss` con Inno Setup después de compilar.
 
 La versión empaquetada guarda los datos de usuario en `%LOCALAPPDATA%\GestorFinanciero`, fuera de los archivos de la aplicación, para conservarlos al actualizar.
+
+## Novedades de 0.3.0
+
+- Panel financiero rediseñado con tarjetas, gráficas interactivas y tabla de movimientos recientes.
+- El gráfico mensual incluye ingresos y egresos de los últimos 12 meses. Al pasar el cursor se muestran valores; al hacer clic en un mes se filtran las categorías y la tabla.
+- La gráfica de anillo permite filtrar por categoría. La leyenda de la gráfica mensual permite ocultar/mostrar series.
+- Se añadió la categoría de gastos al formulario, buscador y exportación CSV.
+- La columna se incorpora mediante migración aditiva. Los datos antiguos no se eliminan; su categoría inicial es “Otros”.
 
 ## Novedades de 0.1.2
 

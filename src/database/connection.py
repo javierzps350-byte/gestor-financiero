@@ -21,6 +21,7 @@ MIGRATIONS: dict[str, dict[str, str]] = {
         "status": "TEXT NOT NULL DEFAULT 'active'",
         "void_reason": "TEXT",
         "voided_at": "TEXT",
+        "category": "TEXT NOT NULL DEFAULT 'Otros'",
     },
     "monthly_charges": {
         "created_at": "TEXT",

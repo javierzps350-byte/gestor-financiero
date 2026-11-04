@@ -29,22 +29,29 @@ try {
     $branch = git branch --show-current
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($branch)) { throw 'No se pudo identificar la rama actual.' }
 
-    $existing = git remote get-url origin 2>$null
-    if ($LASTEXITCODE -eq 0 -and $existing) {
-        Write-Host "Remoto actual: $existing"
-        $replace = Read-Host '¿Deseas reemplazarlo? (S/N)'
-        if ($replace -notmatch '^(s|si|sí)$') { throw 'Operacion cancelada.' }
-        git remote set-url origin $remoteUrl
+    # Query the remote list first. Calling `git remote get-url origin` when
+    # origin does not exist can emit a native-command error in PowerShell 7.
+    $remoteNames = @(git remote)
+    if ($LASTEXITCODE -ne 0) { throw 'No se pudieron consultar los remotos Git.' }
+
+    if ($remoteNames -contains 'origin') {
+        $existing = (git remote get-url origin 2>$null | Select-Object -First 1).Trim()
+        if ($existing -eq $remoteUrl) {
+            Write-Host 'El remoto origin ya apunta a esa direccion. Se conserva.' -ForegroundColor Green
+        } else {
+            Write-Host "Remoto actual: $existing"
+            $replace = Read-Host '¿Deseas reemplazarlo? (S/N)'
+            if ($replace -notmatch '^(s|si|sí)$') { throw 'Operacion cancelada; no se modifico el remoto.' }
+            git remote set-url origin $remoteUrl
+            if ($LASTEXITCODE -ne 0) { throw 'No se pudo actualizar la URL del remoto.' }
+        }
     } else {
         git remote add origin $remoteUrl
+        if ($LASTEXITCODE -ne 0) { throw 'No se pudo configurar el remoto.' }
     }
-    if ($LASTEXITCODE -ne 0) { throw 'No se pudo configurar el remoto.' }
 
-    if ($branch -ne 'main') {
-        git branch -M main
-        if ($LASTEXITCODE -ne 0) { throw 'No se pudo renombrar la rama principal.' }
-        $branch = 'main'
-    }
+    # Preserve the current branch name (for example, `master`). The updater
+    # follows the branch currently checked out and does not require `main`.
 
     Write-Host ''
     Write-Host 'Publicando el historial inicial en el repositorio privado...' -ForegroundColor Cyan

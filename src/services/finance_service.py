@@ -268,6 +268,7 @@ def create_movement(
     voucher_number: str = "",
     notes: str = "",
     apply_to_monthly: bool = False,
+    category: str = "Otros",
 ) -> int:
     if direction not in ("income", "expense"):
         raise ValueError("Tipo de movimiento no válido.")
@@ -287,11 +288,12 @@ def create_movement(
         cursor = connection.execute(
             """INSERT INTO movements
                (direction, client_id, counterparty, reason, amount_cents, payment_date,
-                payment_method, voucher_number, notes, apply_to_monthly)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                payment_method, voucher_number, notes, category, apply_to_monthly)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 direction, client_id, counterparty.strip(), reason.strip(), amount_cents,
                 payment_date, payment_method.strip(), voucher_number.strip(), notes.strip(),
+                (category or ("Ingresos" if direction == "income" else "Otros")).strip(),
                 1 if apply_to_monthly else 0,
             ),
         )
@@ -357,8 +359,8 @@ def search_movements(
         params.append(direction)
     if query.strip():
         needle = f"%{query.strip()}%"
-        clauses.append("(m.counterparty LIKE ? OR m.reason LIKE ? OR m.notes LIKE ? OR c.name LIKE ? OR m.voucher_number LIKE ?)")
-        params.extend([needle] * 5)
+        clauses.append("(m.counterparty LIKE ? OR m.reason LIKE ? OR m.notes LIKE ? OR c.name LIKE ? OR m.voucher_number LIKE ? OR m.category LIKE ?)")
+        params.extend([needle] * 6)
     if voucher.strip():
         clauses.append("m.voucher_number LIKE ?")
         params.append(f"%{voucher.strip()}%")
@@ -532,4 +534,138 @@ def dashboard_summary() -> dict[str, int]:
         "active_clients": clients,
         "clients_with_due_charges": due_clients,
         "overdue_total_cents": overdue_total,
+    }
+
+
+def dashboard_visual_data(
+    chart_month: str | None = None,
+    table_month: str | None = None,
+    category: str | None = None,
+    month_count: int = 12,
+) -> dict[str, Any]:
+    """Return dashboard chart and recent-activity data from real movements.
+
+    ``chart_month`` controls the expense-category donut. ``table_month`` and
+    ``category`` optionally filter the recent-movements table after a chart
+    selection. Monetary values remain integer cents.
+    """
+    from calendar import monthrange
+    from datetime import date
+
+    today = date.today()
+    current_month = today.strftime("%Y-%m")
+    chart_month = chart_month or current_month
+    if len(chart_month) != 7 or chart_month[4] != "-":
+        raise ValueError("El mes debe tener formato AAAA-MM.")
+    try:
+        chart_year, chart_month_number = (int(part) for part in chart_month.split("-"))
+        chart_start = date(chart_year, chart_month_number, 1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("El mes seleccionado no es válido.") from exc
+    chart_end = date(chart_year, chart_month_number, monthrange(chart_year, chart_month_number)[1])
+    if chart_month == current_month:
+        chart_end = min(chart_end, today)
+
+    month_count = max(1, min(int(month_count), 36))
+    absolute = today.year * 12 + today.month - 1
+    first_absolute = absolute - month_count + 1
+    first_year, first_month_index = divmod(first_absolute, 12)
+    first_month = date(first_year, first_month_index + 1, 1)
+
+    month_rows = []
+    month_labels = ("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic")
+    for offset in range(month_count):
+        serial = first_absolute + offset
+        year, month_index = divmod(serial, 12)
+        month = month_index + 1
+        month_rows.append({
+            "month": f"{year:04d}-{month:02d}",
+            "label": month_labels[month_index],
+            "label_full": f"{month_labels[month_index]} {year}",
+            "income_cents": 0,
+            "expenses_cents": 0,
+        })
+
+    first_text = first_month.isoformat()
+    today_text = today.isoformat()
+    with get_connection() as connection:
+        totals = connection.execute(
+            """SELECT
+                COALESCE(SUM(CASE WHEN direction='income' THEN amount_cents ELSE 0 END),0) AS income,
+                COALESCE(SUM(CASE WHEN direction='expense' THEN amount_cents ELSE 0 END),0) AS expenses,
+                (SELECT COUNT(*) FROM clients WHERE is_active=1) AS active_clients
+               FROM movements WHERE status='active'"""
+        ).fetchone()
+        current = connection.execute(
+            """SELECT
+                COALESCE(SUM(CASE WHEN direction='income' THEN amount_cents ELSE 0 END),0) AS income,
+                COALESCE(SUM(CASE WHEN direction='expense' THEN amount_cents ELSE 0 END),0) AS expenses
+               FROM movements
+               WHERE status='active' AND payment_date>=? AND payment_date<=?""",
+            (today.replace(day=1).isoformat(), today_text),
+        ).fetchone()
+        series_rows = connection.execute(
+            """SELECT substr(payment_date,1,7) AS month, direction,
+                      SUM(amount_cents) AS amount
+               FROM movements
+               WHERE status='active' AND payment_date>=? AND payment_date<=?
+               GROUP BY substr(payment_date,1,7), direction""",
+            (first_text, today_text),
+        ).fetchall()
+        series_map = {row["month"]: row for row in month_rows}
+        for row in series_rows:
+            target = series_map.get(row["month"])
+            if target is None:
+                continue
+            key = "income_cents" if row["direction"] == "income" else "expenses_cents"
+            target[key] = int(row["amount"] or 0)
+
+        category_rows = connection.execute(
+            """SELECT COALESCE(NULLIF(trim(category),''),'Otros') AS category,
+                      SUM(amount_cents) AS amount
+               FROM movements
+               WHERE status='active' AND direction='expense'
+                 AND payment_date>=? AND payment_date<=?
+               GROUP BY COALESCE(NULLIF(trim(category),''),'Otros')
+               ORDER BY amount DESC, category COLLATE NOCASE""",
+            (chart_start.isoformat(), chart_end.isoformat()),
+        ).fetchall()
+
+        clauses = ["status='active'"]
+        params: list[Any] = []
+        if table_month:
+            try:
+                year, month = (int(part) for part in table_month.split("-"))
+                start = date(year, month, 1)
+                end = date(year, month, monthrange(year, month)[1])
+            except (TypeError, ValueError) as exc:
+                raise ValueError("El filtro mensual no es válido.") from exc
+            clauses.extend(["payment_date>=?", "payment_date<=?"])
+            params.extend([start.isoformat(), end.isoformat()])
+        if category:
+            clauses.append("COALESCE(NULLIF(trim(category),''),'Otros')=?")
+            params.append(category)
+        recent_rows = connection.execute(
+            """SELECT id, payment_date, counterparty, reason, category,
+                      direction, amount_cents, payment_method, voucher_number
+               FROM movements WHERE """ + " AND ".join(clauses) +
+            " ORDER BY payment_date DESC, id DESC LIMIT 10",
+            params,
+        ).fetchall()
+
+    active_clients = int(totals["active_clients"] or 0)
+    return {
+        "balance_cents": int(totals["income"] or 0) - int(totals["expenses"] or 0),
+        "income_month_cents": int(current["income"] or 0),
+        "expenses_month_cents": int(current["expenses"] or 0),
+        "active_clients": active_clients,
+        "series": month_rows,
+        "categories": [
+            {"category": str(row["category"]), "amount_cents": int(row["amount"] or 0)}
+            for row in category_rows
+        ],
+        "recent": [dict(row) for row in recent_rows],
+        "chart_month": chart_month,
+        "table_month": table_month,
+        "selected_category": category,
     }

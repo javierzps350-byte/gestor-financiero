@@ -6,11 +6,11 @@ from tkinter import messagebox, ttk
 from src.agent.controller import FinancialAgent
 from src.voice.speech import is_voice_engine_available, listen_once
 
-BG = "#0B1220"
-PANEL = "#131F31"
-TEXT = "#EDF2FA"
-MUTED = "#94A3B8"
-ACCENT = "#62B8E8"
+BG = "#F2F6FA"
+PANEL = "#FFFFFF"
+TEXT = "#243449"
+MUTED = "#8190A2"
+ACCENT = "#2BAE9B"
 
 
 class AssistantView(ttk.Frame):
@@ -35,14 +35,14 @@ class AssistantView(ttk.Frame):
         self.chat = tk.Text(
             self, wrap="word", bg=PANEL, fg=TEXT, insertbackground=TEXT,
             relief="flat", padx=18, pady=16, font=("Segoe UI", 10),
-            state="disabled", spacing1=3, spacing3=9,
+            state="disabled", spacing1=3, spacing3=9, highlightthickness=1, highlightbackground="#E1E8EF",
         )
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.chat.yview)
         self.chat.configure(yscrollcommand=scrollbar.set)
         self.chat.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y", padx=(5, 0))
         self.chat.tag_configure("user", foreground=ACCENT, font=("Segoe UI", 9, "bold"), spacing1=9)
-        self.chat.tag_configure("agent", foreground="#A9D7F0", font=("Segoe UI", 9, "bold"), spacing1=9)
+        self.chat.tag_configure("agent", foreground="#238F80", font=("Segoe UI", 9, "bold"), spacing1=9)
         self.chat.tag_configure("body", foreground=TEXT)
         self.chat.tag_configure("muted", foreground=MUTED, font=("Segoe UI", 9))
 
@@ -77,10 +77,10 @@ class AssistantView(ttk.Frame):
     def _plain_button(parent, text, command, primary=False):
         return tk.Button(
             parent, text=text, command=command,
-            bg=ACCENT if primary else "#20334B",
-            fg="#081523" if primary else TEXT,
-            activebackground="#83CFF2" if primary else "#2A405C",
-            activeforeground="#081523" if primary else TEXT,
+            bg=ACCENT if primary else "#EAF0F5",
+            fg="#FFFFFF" if primary else TEXT,
+            activebackground="#239987" if primary else "#E0EAF1",
+            activeforeground="#FFFFFF" if primary else TEXT,
             disabledforeground="#718096", font=("Segoe UI", 9, "bold" if primary else "normal"),
             relief="flat", bd=0, highlightthickness=0,
             padx=15, pady=9, cursor="hand2", takefocus=True,

@@ -1,5 +1,25 @@
 # Historial de cambios
 
+## [0.3.0] — Panel financiero interactivo
+- Rediseño general del programa con una interfaz clara, tarjetas blancas y navegación lateral compacta.
+- Nuevo panel con saldo acumulado registrado, ingresos del mes y egresos del mes.
+- Gráfica de evolución de ingresos y gastos de los últimos 12 meses, con tooltips al pasar el cursor, selección de mes y leyenda para activar/desactivar series.
+- Gráfica de anillo por categoría de gasto; permite seleccionar segmentos o categorías de la leyenda para filtrar los movimientos.
+- Tabla de últimos movimientos con fecha, descripción, categoría, tipo de pago e importe.
+- Se incorporó la categoría de gasto al registro de egresos. Los movimientos antiguos se migran como “Otros” sin perder datos.
+- Búsquedas y exportaciones CSV incluyen la categoría.
+- Las gráficas se dibujan con Canvas de Tkinter: no requieren GPU, Matplotlib ni dependencias externas.
+- Se añadieron pruebas para agregaciones del panel y migración de bases antiguas.
+
+## 0.2.1 — Actualizaciones incrementales
+
+- Se añadieron `actualizar.bat` y `installer/update_windows.ps1` para recibir cambios mediante Git sin descargar un ZIP completo en cada versión.
+- Se añadió `configurar_actualizaciones.bat` para vincular una sola vez la instalación con un repositorio privado.
+- El actualizador comprueba cambios locales antes de actuar y se niega a sobrescribir código modificado.
+- Antes de aplicar una actualización crea un respaldo ZIP de `data/` en `%LOCALAPPDATA%\GestorFinanciero\update_backups`.
+- Las actualizaciones se aplican con fast-forward; no fuerzan ni descartan cambios locales.
+- La base de datos, evidencias y copias de seguridad permanecen fuera del historial Git mediante `.gitignore`.
+
 ## [0.2.0]
 - Se incorporó un agente financiero local, independiente de NEXUS y sin modelos pesados.
 - El agente consulta ingresos, gastos, balance mensual, clientes, deudas y vouchers.
@@ -37,12 +57,3 @@
 ## Regla de mantenimiento
 
 Cada cambio futuro debe agregarse arriba de este registro. No se deben borrar entradas de versiones anteriores.
-
-## 0.2.1 — Actualizaciones incrementales
-
-- Se añadieron `actualizar.bat` y `installer/update_windows.ps1` para recibir cambios mediante Git sin descargar un ZIP completo en cada versión.
-- Se añadió `configurar_actualizaciones.bat` para vincular una sola vez la instalación con un repositorio privado.
-- El actualizador comprueba cambios locales antes de actuar y se niega a sobrescribir código modificado.
-- Antes de aplicar una actualización crea un respaldo ZIP de `data/` en `%LOCALAPPDATA%\GestorFinanciero\update_backups`.
-- Las actualizaciones se aplican con fast-forward; no fuerzan ni descartan cambios locales.
-- La base de datos, evidencias y copias de seguridad permanecen fuera del historial Git mediante `.gitignore`.

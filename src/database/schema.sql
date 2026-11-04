@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS movements (
     payment_method TEXT NOT NULL,
     voucher_number TEXT,
     notes TEXT,
+    category TEXT NOT NULL DEFAULT 'Otros',
     apply_to_monthly INTEGER NOT NULL DEFAULT 0 CHECK (apply_to_monthly IN (0,1)),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','void')),
     void_reason TEXT,

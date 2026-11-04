@@ -11,11 +11,11 @@ def export_movements_csv(destination: str, **filters) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8-sig") as file:
         writer = csv.writer(file, delimiter=";")
-        writer.writerow(["ID", "Estado", "Tipo", "Fecha", "Persona", "Motivo", "Importe", "Método", "Voucher", "Notas"])
+        writer.writerow(["ID", "Estado", "Tipo", "Fecha", "Persona", "Motivo", "Categoría", "Importe", "Método", "Voucher", "Notas"])
         for row in rows:
             writer.writerow([
                 row["id"], row["status"], "Ingreso" if row["direction"] == "income" else "Gasto",
-                row["payment_date"], row["counterparty"], row["reason"],
+                row["payment_date"], row["counterparty"], row["reason"], row.get("category") or "Otros",
                 format_money(row["amount_cents"]), row["payment_method"], row["voucher_number"] or "", row["notes"] or "",
             ])
     return len(rows)

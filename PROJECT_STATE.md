@@ -22,6 +22,7 @@ Aplicación de escritorio financiera independiente, orientada primero a Windows 
 - `v0.1.3`: navegación lateral y animaciones ligeras usando `after()` de Tkinter.
 - `v0.1.4`: limpieza visual, retirada de iconos decorativos y textos redundantes.
 - `v0.2.0`: agente financiero local con consultas, preparación de operaciones, confirmación, navegación y adjuntos de Descargas.
+- `v0.3.0`: rediseño claro inspirado en panel financiero, gráficas interactivas con Canvas Tkinter y clasificación de gastos.
 
 La historia de Git contiene una instantánea de cada uno de esos paquetes.
 
@@ -31,7 +32,7 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 - `src/database/`: conexión SQLite, esquema y migraciones.
 - `src/domain/`: lógica de dinero y cálculo de mensualidades.
 - `src/services/`: operaciones financieras, evidencias y reportes.
-- `src/ui/`: ventana principal, vistas, diálogos y conversación con el agente.
+- `src/ui/`: ventana principal, vistas, diálogos, gráficas Canvas interactivas y conversación con el agente.
 - `src/agent/`: interpretación de instrucciones, consultas, borradores de operaciones y confirmación.
 - `src/voice/`: reconocimiento de voz opcional que alimenta al agente.
 - `src/integrations/`: puente opcional con NEXUS.
@@ -48,7 +49,11 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 - Anular un pago exige motivo y recalcula las cuotas afectadas.
 - Las consultas a fecha histórica no usan pagos posteriores a esa fecha.
 - Evidencias vinculadas a movimientos y almacenadas en la carpeta de datos.
-- Búsqueda por persona, motivo, voucher y fechas; advertencia de voucher duplicado.
+- Búsqueda por persona, motivo, categoría, voucher y fechas; advertencia de voucher duplicado.
+- Dashboard con balance acumulado registrado, ingresos/egresos del mes, evolución mensual de 12 meses, distribución de categorías y últimos movimientos.
+- Gráfica de líneas: hover para ver los valores exactos, click en un mes para filtrar tabla y distribución, click en leyenda para ocultar/mostrar serie.
+- Gráfica de anillo: click en una porción o categoría de leyenda para filtrar los movimientos del período.
+- Categorías de gasto integradas en el registro. Las bases anteriores reciben la columna `category` con valor por defecto `Otros` mediante migración aditiva.
 - Exportación CSV y copias de seguridad.
 - Interfaz sin iconos decorativos ni textos promocionales; animaciones discretas y ligeras.
 - El puente NEXUS no es requisito para arrancar ni operar el programa.
@@ -63,7 +68,7 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 6. Una anulación debe preservar el movimiento y su motivo de anulación; no borrar registros financieros.
 7. Toda migración de base de datos debe ser aditiva, idempotente y respaldar la base antes de modificarla.
 
-## Limitaciones conocidas de v0.2.0
+## Limitaciones conocidas de v0.3.0
 
 - No existe todavía edición directa de movimientos; el flujo actual es anular con motivo y volver a registrar.
 - El agente puede preparar y confirmar registros por texto; el dictado por voz depende de instalar el módulo opcional de Vosk.
@@ -71,6 +76,7 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 - El reconocimiento de voz es opcional y bajo demanda.
 - No hay OCR automático de vouchers.
 - La exportación XLSX/PDF aún no está terminada; existe CSV.
+- Las gráficas se limitan a importes y categorías registradas; no infieren ni reconstruyen categorías antiguas, que migran a `Otros`.
 - El gestor adaptativo de hardware y el instalador por perfiles están pendientes.
 - La conexión desde iPhone/remota está pendiente.
 
@@ -96,11 +102,13 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 8. No incluir bases de datos, comprobantes, tokens, logs ni copias de seguridad personales en los paquetes de distribución.
 9. Nunca indicar que una prueba visual se hizo en Windows si solo se comprobó en otro entorno.
 
-## Actualizaciones incrementales — v0.2.1
+## Actualizaciones incrementales — v0.2.1 y posteriores
 
 - Git es el mecanismo de sincronizacion del codigo, no de los datos personales.
 - Configuracion unica: `configurar_actualizaciones.bat` enlaza el clon con un repositorio privado y publica la rama `main`.
 - Actualizacion normal: cerrar la aplicacion y ejecutar `actualizar.bat`; `installer/update_windows.ps1` hace fetch, comprueba divergencias/cambios locales, respalda `data/` y aplica `git merge --ff-only`.
 - Nunca subir `data/`, evidencias, tokens, modelos ni respaldos al remoto.
-- El ZIP 0.2.1 solo es necesario para la transicion inicial. Las siguientes entregas deben publicarse como commits en el remoto para que el usuario actualice con `actualizar.bat`.
-- Pendiente: vincular el remoto privado del usuario y probar un ciclo real push -> fetch/pull en Windows.
+- El usuario configuró Git para Windows, vinculó el repositorio privado y confirmó el primer `git push -u origin master` desde su equipo. La rama remota activa es `master`.
+- Las siguientes entregas deben aplicarse sobre este mismo historial, publicarse como commits en `origin/master` y recibirse mediante actualización incremental. No volver a entregar ZIP completos salvo para recuperación o instalación inicial.
+- El conector de GitHub disponible en el entorno de desarrollo no tiene acceso confirmado al repositorio privado; cuando no exista ese acceso, entregar un parche Git verificable para que el usuario lo aplique y publique.
+- Pendiente: integrar la comprobación/aplicación de actualizaciones dentro de la aplicación y eliminar la consola visible del flujo normal de actualización. El acceso directo de uso diario debe arrancar con `pythonw.exe` o el ejecutable empaquetado, nunca con una consola.

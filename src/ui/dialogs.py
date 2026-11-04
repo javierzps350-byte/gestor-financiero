@@ -14,9 +14,9 @@ def primary_button(parent, text: str, command):
     """Button with explicit Tk styling to avoid ttk theme/DPI rendering quirks."""
     return tk.Button(
         parent, text=text, command=command,
-        bg="#62B8E8", fg="#081523",
-        activebackground="#83CFF2", activeforeground="#081523",
-        disabledforeground="#718096",
+        bg="#2BAE9B", fg="#FFFFFF",
+        activebackground="#239987", activeforeground="#FFFFFF",
+        disabledforeground="#A0AAB7",
         font=("Segoe UI", 9, "bold"),
         relief="flat", bd=0, highlightthickness=0,
         padx=18, pady=9, cursor="hand2",
@@ -32,7 +32,7 @@ class BaseDialog(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
-        self.configure(bg="#0B1220")
+        self.configure(bg="#F2F6FA")
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
 
@@ -75,7 +75,7 @@ class ClientDialog(BaseDialog):
         dialog = tk.Toplevel(self)
         dialog.title("Archivos recientes de Descargas")
         dialog.geometry("720x420")
-        dialog.configure(bg="#101827")
+        dialog.configure(bg="#F2F6FA")
         dialog.transient(self)
         frame = ttk.Frame(dialog, padding=16)
         frame.pack(fill="both", expand=True)
@@ -159,6 +159,10 @@ class RateDialog(BaseDialog):
 
 class MovementDialog(BaseDialog):
     METHODS = ["Transferencia", "Depósito", "Efectivo", "Cheque", "Tarjeta", "Otro"]
+    EXPENSE_CATEGORIES = [
+        "Hogar", "Comida", "Transporte", "Entretenimiento", "Salud",
+        "Educación", "Servicios", "Compras", "Negocio", "Otros",
+    ]
 
     def __init__(self, parent, direction: str, on_saved):
         title = "Registrar ingreso" if direction == "income" else "Registrar gasto"
@@ -173,6 +177,7 @@ class MovementDialog(BaseDialog):
             "amount": tk.StringVar(), "date": tk.StringVar(value=date.today().isoformat()),
             "method": tk.StringVar(value="Transferencia"), "voucher": tk.StringVar(),
             "client": tk.StringVar(), "apply": tk.BooleanVar(value=False),
+            "category": tk.StringVar(value="Otros"),
         }
         body = ttk.Frame(self, padding=22)
         body.pack(fill="both", expand=True)
@@ -188,11 +193,19 @@ class MovementDialog(BaseDialog):
         self._field(body, "Fecha del pago (AAAA-MM-DD) *", "date")
         ttk.Label(body, text="Tipo de pago *").pack(anchor="w", pady=(9, 3))
         ttk.Combobox(body, textvariable=self.vars["method"], values=self.METHODS, state="readonly").pack(fill="x")
+        if direction == "expense":
+            ttk.Label(body, text="Categoría del gasto *").pack(anchor="w", pady=(9, 3))
+            ttk.Combobox(
+                body, textvariable=self.vars["category"], values=self.EXPENSE_CATEGORIES,
+                state="readonly",
+            ).pack(fill="x")
+        else:
+            self.vars["category"].set("Ingresos")
         self._field(body, "Número de voucher / comprobante (opcional)", "voucher")
         if direction == "income":
             ttk.Checkbutton(body, text="Aplicar este ingreso a las mensualidades del cliente", variable=self.vars["apply"]).pack(anchor="w", pady=(12, 4))
         ttk.Label(body, text="Observaciones (opcional)").pack(anchor="w", pady=(9, 3))
-        self.notes = tk.Text(body, height=3, wrap="word", bg="#131F31", fg="#EDF2FA", insertbackground="white", relief="flat", padx=9, pady=7)
+        self.notes = tk.Text(body, height=3, wrap="word", bg="#FFFFFF", fg="#243449", insertbackground="#243449", relief="flat", highlightthickness=1, highlightbackground="#DFE7EF", padx=9, pady=7)
         self.notes.pack(fill="x")
         evidence_frame = ttk.Frame(body)
         evidence_frame.pack(fill="x", pady=(12, 0))
@@ -237,7 +250,7 @@ class MovementDialog(BaseDialog):
         dialog = tk.Toplevel(self)
         dialog.title("Archivos recientes de Descargas")
         dialog.geometry("720x420")
-        dialog.configure(bg="#101827")
+        dialog.configure(bg="#F2F6FA")
         dialog.transient(self)
         frame = ttk.Frame(dialog, padding=16)
         frame.pack(fill="both", expand=True)
@@ -307,6 +320,7 @@ class MovementDialog(BaseDialog):
                 voucher_number=self.vars["voucher"].get(),
                 notes=self.notes.get("1.0", "end").strip(),
                 apply_to_monthly=self.vars["apply"].get(),
+                category=self.vars["category"].get(),
             )
             attachment_errors = []
             for path in self.evidence_paths:
