@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -187,6 +188,68 @@ class FinancialAgentTests(unittest.TestCase):
         answer = self.agent.handle("¿Cuál es el balance del mes?")
         self.assertIn("ingresos", answer.lower())
         self.assertIn("gastos", answer.lower())
+
+
+    def test_named_month_range_understands_income_query(self):
+        from src.services.finance_service import create_movement
+        create_movement(
+            direction="income", counterparty="Carlos", reason="Mensualidad",
+            amount_cents=2500, payment_date="2026-11-02",
+            payment_method="Transferencia", voucher_number="N-01",
+        )
+        answer = self.agent.handle("¿Cuánto he recibido en noviembre de 2026?")
+        self.assertIn("$25,00", answer)
+        self.assertIn("noviembre de 2026", answer)
+
+    def test_category_query_filters_expenses_in_named_month(self):
+        from src.services.finance_service import create_movement
+        create_movement(
+            direction="expense", counterparty="Supermercado", reason="Compra de alimentos",
+            amount_cents=3750, payment_date="2026-11-03",
+            payment_method="Tarjeta", category="Comida",
+        )
+        create_movement(
+            direction="expense", counterparty="Taxi", reason="Traslado",
+            amount_cents=1200, payment_date="2026-11-03",
+            payment_method="Efectivo", category="Transporte",
+        )
+        answer = self.agent.handle("¿Cuánto gasté en comida durante noviembre de 2026?")
+        self.assertIn("$37,50", answer)
+        self.assertIn("Comida", answer)
+
+    def test_client_history_query_uses_registered_client(self):
+        from src.services.finance_service import create_movement
+        client_id = create_client("María Fernanda", 2500, "2026-01-01")
+        create_movement(
+            direction="income", counterparty="María Fernanda", reason="Mensualidad",
+            amount_cents=2500, payment_date="2026-11-02",
+            payment_method="Transferencia", client_id=client_id,
+        )
+        answer = self.agent.handle("Muéstrame los pagos de María Fernanda en noviembre de 2026")
+        self.assertIn("María Fernanda", answer)
+        self.assertIn("$25,00", answer)
+
+    def test_previous_month_period_is_resolved(self):
+        from calendar import monthrange
+        from src.agent.controller import _extract_period_range
+        today = date.today()
+        expected_year = today.year if today.month > 1 else today.year - 1
+        expected_month = today.month - 1 if today.month > 1 else 12
+        actual = _extract_period_range("¿Qué gastos tuve el mes pasado?")
+        self.assertEqual(actual[0], date(expected_year, expected_month, 1).isoformat())
+        self.assertEqual(actual[1], date(expected_year, expected_month, monthrange(expected_year, expected_month)[1]).isoformat())
+
+    def test_year_period_is_resolved(self):
+        from src.agent.controller import _extract_period_range
+        self.assertEqual(
+            _extract_period_range("Consulta los movimientos de todo el año 2025"),
+            ("2025-01-01", "2025-12-31"),
+        )
+
+    def test_question_about_amount_paid_is_not_treated_as_new_expense(self):
+        from src.agent.controller import FinancialAgent
+        self.assertTrue(FinancialAgent._is_query_request("cuanto he pagado este mes"))
+        self.assertFalse(FinancialAgent._is_query_request("pague 18 dolares a la empresa electrica"))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Gestor Financiero
 
-**Versión 0.6.1** — mejora la estabilidad de los formularios, fija los botones Guardar/Cancelar, permite cerrar el calendario con clic exterior o Escape, corrige superficies claras del tema oscuro y evita bloqueos al solicitar exportaciones/evidencias sin resultados.
+**Versión 0.7.0** — mejora la estabilidad de los formularios, fija los botones Guardar/Cancelar, permite cerrar el calendario con clic exterior o Escape, corrige superficies claras del tema oscuro y evita bloqueos al solicitar exportaciones/evidencias sin resultados.
 
 Aplicación de escritorio local para Windows, construida con Python, Tkinter y SQLite. No requiere servidor, nube, GPU ni conexión a Internet para registrar y consultar información.
 

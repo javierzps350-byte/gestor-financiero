@@ -28,6 +28,7 @@ from src.ui.date_picker import DatePickerEntry
 from src.ui.widgets import ElegantCombobox
 from src.ui.assistant_view import AssistantView
 from src.ui.charts import MonthlyLineChart, ExpenseDonutChart, TEAL, CORAL
+from src.ui.window_chrome import NativeWindowChrome
 
 BG = "#F2F6FA"
 PANEL = "#FFFFFF"
@@ -77,6 +78,9 @@ class MainWindow:
         y = max(0, (screen_height - window_height) // 2)
         root.geometry(f"{window_width}x{window_height}+{x}+{y}")
         root.minsize(min(980, window_width), min(620, window_height))
+        self.chrome = NativeWindowChrome(root)
+        self.chrome.install()
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
         root.configure(bg=self.theme_manager.palette["bg"])
         self._configure_style()
         self._build_shell()
@@ -105,10 +109,8 @@ class MainWindow:
         p = self.theme_manager.palette
         if hasattr(self, "data_button"):
             self.data_button.configure(bg=p["panel"], fg=p["text"], activebackground=p["selected"], activeforeground=p["text"])
-        if hasattr(self, "theme_button"):
-            self.theme_button.configure(text=self._theme_button_text(), bg=p["sidebar"], fg=p["text"], activebackground=p["selected"], activeforeground=p["text"])
-        if hasattr(self, "theme_panel") and self.theme_panel.winfo_manager():
-            self._build_theme_options()
+        self._draw_theme_swatches()
+        self._apply_window_chrome_theme(p)
         if hasattr(self, "dashboard"):
             self.dashboard.apply_theme(p)
             self.dashboard.recent_tree.tag_configure("income", foreground=p["success"])
@@ -149,51 +151,97 @@ class MainWindow:
         y = max(8, min(y, screen_h - height - 8))
         window.geometry(f"{width}x{height}+{x}+{y}")
 
-    def open_theme_picker(self):
-        """Expand/collapse a compact theme selector inside the sidebar."""
-        if self.theme_panel.winfo_manager():
-            self.theme_panel.pack_forget()
+    def _draw_theme_swatches(self):
+        # Draw three compact icon-only theme selectors at the bottom of the sidebar.
+        canvas = getattr(self, "theme_canvas", None)
+        if canvas is None:
             return
-        self._build_theme_options()
-        self.theme_panel.pack(fill="x", before=self.theme_button, pady=(0, 7))
-        self.theme_button.configure(relief="flat")
-
-    def _build_theme_options(self):
-        for child in self.theme_panel.winfo_children():
-            child.destroy()
         p = self.theme_manager.palette
-        self.theme_panel.configure(bg=p["sidebar"])
-        for theme_id, theme in THEMES.items():
+        canvas.configure(bg=p["sidebar"])
+        canvas.delete("all")
+        swatches = (
+            # Three small faceted marks echo the floating geometric accents in the reference.
+            ("claro", 19, "#F6F8FA", "#D4E2EC", "#96B8C9"),
+            ("suave", 53, "#F1F2EE", "#CCD2CC", "#9BAAA1"),
+            ("oscuro", 87, "#60788B", "#344B5D", "#1E2D3A"),
+        )
+        for theme_id, x, top_color, left_color, right_color in swatches:
             active = theme_id == self.theme_manager.theme_id
-            card_bg = p["selected"] if active else p["panel"]
-            card = tk.Frame(
-                self.theme_panel, bg=card_bg, padx=5, pady=5,
-                highlightthickness=1,
-                highlightbackground=p["accent"] if active else p["border"],
+            canvas.create_oval(
+                x - 13, 3, x + 13, 31,
+                fill=p["selected"] if active else p["sidebar"],
+                outline=p["accent"] if active else p["border"],
+                width=1.5 if active else 1,
             )
-            card.pack(fill="x", pady=2)
-            swatches = tk.Frame(card, bg=card_bg)
-            swatches.pack(fill="x", pady=(0, 3))
-            for color in (theme["bg"], theme["panel"], theme["accent"], theme["expense"]):
-                tk.Frame(swatches, bg=color, width=17, height=5, highlightthickness=0).pack(side="left", padx=(0, 3))
-            label = {
-                "claro": "Claro premium",
-                "suave": "Gris suave",
-                "oscuro": "Oscuro elegante",
-            }.get(theme_id, theme["label"])
-            button = tk.Button(
-                card, text=label, anchor="w", command=lambda key=theme_id: self._select_theme(key),
-                bg=card_bg, fg=p["text"], activebackground=p["selected"], activeforeground=p["text"],
-                relief="flat", bd=0, highlightthickness=0,
-                font=("Segoe UI", 8, "bold" if active else "normal"), cursor="hand2",
-                padx=1, pady=1, wraplength=88, justify="left",
+            tags = (f"theme:{theme_id}",)
+            # Top and two shaded faces make each mark read as a tiny 3-D tile.
+            canvas.create_polygon(
+                x, 6, x + 9, 11, x, 17, x - 9, 11,
+                fill=top_color, outline=p["border"], width=0.8, tags=tags,
             )
-            button.pack(fill="x")
-            card.bind("<Button-1>", lambda _e, key=theme_id: self._select_theme(key))
-            swatches.bind("<Button-1>", lambda _e, key=theme_id: self._select_theme(key))
+            canvas.create_polygon(
+                x - 9, 11, x, 17, x, 28, x - 9, 22,
+                fill=left_color, outline=p["border"], width=0.8, tags=tags,
+            )
+            canvas.create_polygon(
+                x + 9, 11, x, 17, x, 28, x + 9, 22,
+                fill=right_color, outline=p["border"], width=0.8, tags=tags,
+            )
+        canvas.configure(cursor="hand2")
 
-    def _select_theme(self, theme_id):
-        self.change_theme(theme_id)
+    def _on_theme_swatches_click(self, event):
+        for theme_id, x in (("claro", 19), ("suave", 53), ("oscuro", 87)):
+            if abs(event.x - x) <= 13:
+                self.change_theme(theme_id)
+                return "break"
+        return None
+
+    def _begin_title_drag(self, _event=None):
+        self.chrome.begin_drag()
+
+    def _minimize_window(self):
+        try:
+            self.root.iconify()
+        except tk.TclError:
+            pass
+
+    def _toggle_maximize(self, _event=None):
+        try:
+            self.root.state("normal" if self.root.state() == "zoomed" else "zoomed")
+            self.root.after(80, self._refresh_maximize_glyph)
+        except tk.TclError:
+            pass
+        return "break"
+
+    def _refresh_maximize_glyph(self):
+        try:
+            if hasattr(self, "maximize_button") and self.maximize_button.winfo_exists():
+                self.maximize_button.configure(text="▢" if self.root.state() == "zoomed" else "□")
+        except tk.TclError:
+            pass
+
+    def _apply_window_chrome_theme(self, palette):
+        if not hasattr(self, "window_titlebar"):
+            return
+        self.window_titlebar.configure(bg=palette["sidebar"])
+        self.window_title.configure(bg=palette["sidebar"], fg=palette["text"])
+        self.window_brand.configure(bg=palette["sidebar"], fg=palette["accent"])
+        for button in (getattr(self, "minimize_button", None), getattr(self, "maximize_button", None)):
+            if button is not None:
+                button.configure(
+                    bg=palette["sidebar"], fg=palette["text"],
+                    activebackground=palette["selected"], activeforeground=palette["text"],
+                )
+        if hasattr(self, "close_button"):
+            self.close_button.configure(
+                bg=palette["sidebar"], fg=palette["muted"],
+                activebackground=palette["danger"], activeforeground=palette["panel"],
+            )
+        if hasattr(self, "data_button"):
+            self.data_button.configure(
+                bg=palette["sidebar"], fg=palette["text"],
+                activebackground=palette["selected"], activeforeground=palette["text"],
+            )
 
     def open_data_actions(self):
         current = getattr(self, "_data_picker", None)
@@ -277,25 +325,70 @@ class MainWindow:
         except Exception as exc:
             messagebox.showerror("No se pudo restaurar el paquete", str(exc), parent=self.root)
 
-    def _theme_button_text(self):
-        label = THEMES[self.theme_manager.theme_id]["label"]
-        return f"Apariencia\n{label}"
-
     def _build_shell(self):
-        top = tk.Frame(self.root, bg=WHITE, height=66, padx=28)
+        p = self.theme_manager.palette
+        top = tk.Frame(self.root, bg=p["sidebar"], height=46, padx=17)
         top.pack(fill="x")
         top.pack_propagate(False)
-        tk.Label(top, text="Gestor Financiero", bg=WHITE, fg=TEXT, font=("Segoe UI", 16, "bold")).pack(side="left", anchor="center")
+        self.window_titlebar = top
+        self.window_brand = tk.Label(
+            top, text="●", bg=p["sidebar"], fg=p["accent"],
+            font=("Segoe UI Symbol", 10), padx=2,
+        )
+        self.window_brand.pack(side="left", padx=(0, 8))
+        self.window_title = tk.Label(
+            top, text="Gestor Financiero", bg=p["sidebar"], fg=p["text"],
+            font=("Segoe UI", 10, "bold"), anchor="w",
+        )
+        self.window_title.pack(side="left", anchor="center")
+
+        self.close_button = tk.Button(
+                top, text="×", command=self.root.destroy,
+                bg=p["sidebar"], fg=p["muted"], activebackground=p["danger"],
+                activeforeground=p["panel"], relief="flat", bd=0,
+                highlightthickness=0, font=("Segoe UI Symbol", 13),
+                width=4, cursor="hand2",
+            )
+        self.close_button.pack(side="right", fill="y")
+        self.maximize_button = tk.Button(
+                top, text="□", command=self._toggle_maximize,
+                bg=p["sidebar"], fg=p["text"], activebackground=p["selected"],
+                activeforeground=p["text"], relief="flat", bd=0,
+                highlightthickness=0, font=("Segoe UI Symbol", 10),
+                width=4, cursor="hand2",
+            )
+        self.maximize_button.pack(side="right", fill="y")
+        self.minimize_button = tk.Button(
+                top, text="—", command=self._minimize_window,
+                bg=p["sidebar"], fg=p["text"], activebackground=p["selected"],
+                activeforeground=p["text"], relief="flat", bd=0,
+                highlightthickness=0, font=("Segoe UI", 12),
+                width=4, cursor="hand2",
+            )
+        self.minimize_button.pack(side="right", fill="y")
+        for button in (self.minimize_button, self.maximize_button):
+            button.bind("<Enter>", lambda _event, target=button: target.configure(bg=self.theme_manager.palette["selected"]))
+            button.bind("<Leave>", lambda _event, target=button: target.configure(bg=self.theme_manager.palette["sidebar"]))
+        self.close_button.bind("<Enter>", lambda _event: self.close_button.configure(bg=self.theme_manager.palette["danger"]))
+        self.close_button.bind("<Leave>", lambda _event: self.close_button.configure(bg=self.theme_manager.palette["sidebar"]))
+
         self.data_button = tk.Button(
             top, text="Datos", command=self.open_data_actions,
-            bg=WHITE, fg=TEXT, activebackground="#EAF5F3", activeforeground=TEXT,
-            relief="flat", bd=0, highlightthickness=0,
-            font=("Segoe UI", 9, "bold"), padx=15, pady=9, cursor="hand2",
+            bg=p["sidebar"], fg=p["text"], activebackground=p["selected"],
+            activeforeground=p["text"], relief="flat", bd=0,
+            highlightthickness=0, font=("Segoe UI", 9, "bold"),
+            padx=14, cursor="hand2",
         )
-        self.data_button.pack(side="right", anchor="center")
-        self.data_button.bind("<Enter>", lambda _e: self.data_button.configure(bg=self.theme_manager.palette["selected"]))
-        self.data_button.bind("<Leave>", lambda _e: self.data_button.configure(bg=self.theme_manager.palette["panel"]))
-        tk.Frame(self.root, bg=BORDER, height=1).pack(fill="x")
+        self.data_button.pack(side="right", fill="y", padx=(0, 8))
+        self.data_button.bind("<Enter>", lambda _event: self.data_button.configure(bg=self.theme_manager.palette["selected"]))
+        self.data_button.bind("<Leave>", lambda _event: self.data_button.configure(bg=self.theme_manager.palette["sidebar"]))
+
+        if self.chrome.installed:
+            for drag_target in (top, self.window_brand, self.window_title):
+                drag_target.bind("<ButtonPress-1>", self._begin_title_drag, add="+")
+                drag_target.bind("<Double-Button-1>", self._toggle_maximize, add="+")
+
+        tk.Frame(self.root, bg=p["border"], height=1).pack(fill="x")
 
         shell = tk.Frame(self.root, bg=BG)
         shell.pack(fill="both", expand=True)
@@ -305,24 +398,17 @@ class MainWindow:
         for page_id, label in self.NAV_ITEMS:
             self._make_nav_button(page_id, label)
 
-        # Theme selection lives at the bottom of the navigation rail, not in
-        # the page header. No text-selection widget remains after a theme pick.
+        # Three colored marks replace the textual theme selector.
         sidebar_footer = tk.Frame(self.sidebar, bg=SIDEBAR)
         sidebar_footer.pack(side="bottom", fill="x", pady=(10, 0))
-        tk.Frame(sidebar_footer, bg=BORDER, height=1).pack(fill="x", pady=(0, 10))
-        self.theme_panel = tk.Frame(sidebar_footer, bg=SIDEBAR)
-        self.theme_button = tk.Button(
-            sidebar_footer,
-            text=self._theme_button_text(),
-            command=self.open_theme_picker,
-            bg=SIDEBAR, fg=TEXT, activebackground="#EAF5F3", activeforeground=TEXT,
-            relief="flat", bd=0, highlightthickness=0,
-            font=("Segoe UI", 9, "bold"), padx=6, pady=11,
-            cursor="hand2", justify="center", wraplength=102,
+        tk.Frame(sidebar_footer, bg=SIDEBAR, height=1).pack(fill="x", pady=(0, 8))
+        self.theme_canvas = tk.Canvas(
+            sidebar_footer, width=106, height=34, bg=SIDEBAR,
+            bd=0, highlightthickness=0, takefocus=True,
         )
-        self.theme_button.pack(fill="x")
-        self.theme_button.bind("<Enter>", lambda _e: self.theme_button.configure(bg=self.theme_manager.palette["selected"]))
-        self.theme_button.bind("<Leave>", lambda _e: self.theme_button.configure(bg=self.theme_manager.palette["sidebar"]))
+        self.theme_canvas.pack(anchor="center")
+        self.theme_canvas.bind("<Button-1>", self._on_theme_swatches_click)
+        self._draw_theme_swatches()
 
         work = tk.Frame(shell, bg=BG)
         work.pack(side="left", fill="both", expand=True)
@@ -488,15 +574,11 @@ class DashboardView(ttk.Frame):
     def _build(self):
         heading = tk.Frame(self, bg=BG)
         heading.pack(fill="x", pady=(0, 9))
-        title_block = tk.Frame(heading, bg=BG)
-        title_block.pack(side="left", fill="x", expand=True)
-        tk.Label(title_block, text="Hola, bienvenido", bg=BG, fg=TEXT, font=("Segoe UI", 19, "bold")).pack(anchor="w")
-        tk.Label(title_block, text="Este es el resumen de tu actividad financiera.", bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 0))
         weekday_names = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
         month_names = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
         today = date.today()
         date_label = f"{weekday_names[today.weekday()].capitalize()}, {today.day} de {month_names[today.month - 1]} de {today.year}"
-        tk.Label(heading, text=date_label, bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(side="right", anchor="e", pady=(10, 0))
+        tk.Label(heading, text=date_label, bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(side="right", anchor="e", pady=(4, 0))
 
         cards = tk.Frame(self, bg=BG)
         cards.pack(fill="x", pady=(0, 9))

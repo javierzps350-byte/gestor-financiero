@@ -84,14 +84,21 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 6. Una anulación debe preservar el movimiento y su motivo de anulación; no borrar registros financieros.
 7. Toda migración de base de datos debe ser aditiva, idempotente y respaldar la base antes de modificarla.
 
-## Limitaciones conocidas de v0.6.1
+## Estado visual v0.7.0
+- En Windows, `src/ui/window_chrome.py` quita el título nativo sin usar `overrideredirect`; conserva el estilo de redimensionamiento y los controles del administrador de ventanas.
+- Los controles de minimizar, maximizar/restaurar y cerrar se integran en la barra superior de la aplicación.
+- Los temas se eligen mediante tres controles circulares sin texto al pie del sidebar; la preferencia continúa guardándose en `data/ui_preferences.json`.
+- El dashboard no muestra saludo ni subtítulos introductorios; el agente abre sin ejemplos.
+- El agente comprende períodos, categorías, clientes, métodos, movimientos y vouchers mediante reglas locales; las escrituras siguen requiriendo confirmación.
+
+## Limitaciones conocidas de v0.7.0
 - La interfaz, los calendarios y los diálogos se probaron con una sesión gráfica virtual (Xvfb); todavía falta validar la apariencia final en la computadora Windows del usuario con su resolución y escala DPI.
 - El PDF es un resumen tabular de lectura: los textos largos se abrevian para conservar el ancho de página. Para conservar todas las observaciones y campos largos se debe usar XLSX, XML, TXT o CSV.
 - El XML es un formato de intercambio de reportes, no una copia integral restaurable de la base de datos. Para trasladar todo el programa entre equipos se debe utilizar el paquete `.gfbak`, que incluye base y evidencias.
 
 - No existe todavía edición directa de movimientos; el flujo actual es anular con motivo y volver a registrar.
 - El agente puede preparar y confirmar registros por texto; el dictado por voz depende de instalar el módulo opcional de Vosk.
-- La comprensión es actualmente determinista por reglas y patrones; todavía no utiliza un LLM local. La arquitectura permite añadir un motor conversacional opcional más adelante.
+- La comprensión es determinista y local mediante reglas, normalización y extracción de entidades; todavía no utiliza un LLM local. La arquitectura permite añadir un motor conversacional opcional más adelante.
 - El reconocimiento de voz es opcional y bajo demanda.
 - No hay OCR automático de vouchers.
 - Las gráficas se limitan a importes y categorías registradas; no infieren ni reconstruyen categorías antiguas, que migran a `Otros`.
@@ -131,13 +138,14 @@ La historia de Git contiene una instantánea de cada uno de esos paquetes.
 - Pendiente: integrar la comprobación/aplicación de actualizaciones dentro de la aplicación y eliminar la consola visible del flujo normal de actualización. El acceso directo de uso diario debe arrancar con `pythonw.exe` o el ejecutable empaquetado, nunca con una consola.
 
 
-## Estado visual v0.6.0–v0.6.1
+## Estado visual v0.6.0–v0.7.0
 - Los controles `ttk` usan estilos de campos y botones refinados y coherentes con el tema activo.
 - Todos los selectores de la interfaz se implementan mediante `src.ui.widgets.ElegantCombobox`, que elimina visualmente la flecha lateral y abre el popdown al hacer clic en toda la barra.
-- El selector de temas vive en la parte inferior del sidebar, abre un panel flotante y actualiza el tema sin un `Combobox` editable/seleccionable.
+- El selector de temas vive en la parte inferior del sidebar con tres figuras circulares sin texto ni panel flotante.
 - El menú de Datos usa un panel de acciones sin flecha lateral.
 - Los formularios extensos usan un canvas desplazable y un footer fijo para que Guardar/Cancelar no queden fuera de pantalla.
 - Los calendarios globales se gestionan por raíz Tk mediante un dispatcher ligero; se cierran por clic exterior, Escape o el botón de calendario y se retiran de la lista activa al cerrar/destruir.
 - El tema oscuro configura la lista desplegable nativa de `ttk.Combobox`, los indicadores de casillas, colores de foco, bordes de Treeview y scrollbars.
 - Las acciones de movimientos sin selección o sin resultados responden con un mensaje inline temporizado y no abren modales innecesarios.
 - No cambiar la persistencia de `data/ui_preferences.json` ni el motor financiero al continuar refinando la UI.
+- La barra superior de Windows usa `NativeWindowChrome`; no sustituirlo por `overrideredirect()` ni retirar WS_THICKFRAME/WS_MINIMIZEBOX/WS_MAXIMIZEBOX.

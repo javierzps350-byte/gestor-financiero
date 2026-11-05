@@ -110,12 +110,12 @@ class ElegantControlTests(unittest.TestCase):
                 finally:
                     root.destroy()
 
-    def test_sidebar_theme_picker_changes_theme_without_text_combobox(self):
+    def test_sidebar_theme_palette_uses_three_icon_only_swatches(self):
         if os.environ.get("GF_RUN_UI_TESTS") != "1":
             self.skipTest("Activa GF_RUN_UI_TESTS=1 para ejecutar pruebas visuales Tkinter")
         import tkinter as tk
-        from src.database.connection import initialize_database
         from src.ui.main_window import MainWindow
+        from src.database.connection import initialize_database
         try:
             root = tk.Tk()
         except tk.TclError as exc:
@@ -125,27 +125,18 @@ class ElegantControlTests(unittest.TestCase):
             root.geometry("1280x820+10+10")
             app = MainWindow(root)
             root.update()
-            self.assertTrue(hasattr(app, "theme_button"))
-            self.assertFalse(hasattr(app, "theme_box"))
-            self.assertIsInstance(app.data_button, tk.Button)
-            app.open_theme_picker()
-            root.update()
-            self.assertTrue(app.theme_panel.winfo_manager())
-            app._select_theme("oscuro")
+            self.assertTrue(hasattr(app, "theme_canvas"))
+            self.assertFalse(hasattr(app, "theme_button"))
+            self.assertFalse(hasattr(app, "theme_panel"))
+            self.assertEqual(int(app.theme_canvas.cget("height")), 34)
+            app.theme_canvas.event_generate("<Button-1>", x=87, y=17)
             root.update()
             self.assertEqual(app.theme_manager.theme_id, "oscuro")
-            self.assertIn("Oscuro elegante", app.theme_button.cget("text"))
-            self.assertTrue(app.theme_panel.winfo_manager())
-            app.change_theme("claro")
-            root.update()
-            app.open_data_actions()
-            root.update()
-            self.assertTrue(app._data_picker.winfo_exists())
-            app._data_picker.destroy()
-            app._data_picker = None
-            root.update()
-        finally:
-            root.destroy()
+            self.assertEqual(app.theme_manager.palette["bg"], THEMES["oscuro"]["bg"])
+            self.assertEqual(len(app.theme_canvas.find_withtag("theme:claro")), 3)
+            self.assertEqual(len(app.theme_canvas.find_withtag("theme:suave")), 3)
+            self.assertEqual(len(app.theme_canvas.find_withtag("theme:oscuro")), 3)
+
 
 
 if __name__ == "__main__":

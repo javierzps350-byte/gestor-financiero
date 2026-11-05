@@ -22,3 +22,4 @@ evidence/*
 *.sqlite3-wal
 *.sqlite3-shm
 *.token
+*.gfbak

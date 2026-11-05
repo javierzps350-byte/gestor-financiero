@@ -1,6 +1,15 @@
 # Historial de cambios
 
-
+## [0.7.0] — Ventana moderna, temas compactos y agente más comprensivo
+- En Windows se sustituye la barra de título convencional por una barra integrada en la aplicación con minimizar, maximizar/restaurar y cerrar en la esquina superior derecha.
+- Se elimina únicamente la zona de título nativa; se conserva el estilo de redimensionamiento, los controles del sistema, la barra de tareas y Alt+Tab. Windows 11 recibe esquinas redondeadas cuando DWM lo admite.
+- La barra personalizada permite arrastrar la ventana y maximizar/restaurar con doble clic.
+- El selector de temas pasa a tres controles circulares de color en la parte inferior del sidebar, sin etiquetas ni panel desplegable.
+- Se retiran el saludo y los textos de bienvenida del encabezado del dashboard.
+- Se elimina el bloque de ejemplos del agente; la pantalla inicia con una pregunta breve.
+- Se amplía la interpretación local del agente con sinónimos, meses, años, fechas DD/MM/AAAA, rangos, categorías, clientes, movimientos, métodos de pago, vouchers, balances e historiales.
+- El agente continúa sin LLM ni GPU; toda acción que modifica datos conserva la preparación y confirmación explícita.
+- Se unifican los metadatos de versión de aplicación e instalador en 0.7.0 y se excluyen los paquetes .gfbak de Git.
 ## [0.6.1] — Estabilidad de formularios, calendario y acciones sin resultados
 - Los formularios de clientes, cambio de tarifa e ingresos/gastos usan un cuerpo desplazable con botones Guardar y Cancelar anclados en un pie fijo. La altura se adapta al área disponible del monitor y conserva los botones visibles incluso con escalado DPI o ventanas más pequeñas.
 - El calendario desplegable se cierra al pulsar su propio botón, al hacer clic fuera o con Escape. Los clics fuera no roban el foco del control que el usuario acaba de pulsar; la selección de una fecha devuelve el foco al campo correspondiente.

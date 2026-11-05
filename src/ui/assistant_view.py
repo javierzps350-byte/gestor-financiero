@@ -28,12 +28,6 @@ class AssistantView(ttk.Frame):
 
     def _build(self):
         ttk.Label(self, text="Agente", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(
-            self,
-            text="Consulta y administra tus registros con instrucciones en lenguaje natural.",
-            style="SubTitle.TLabel",
-        ).pack(anchor="w", pady=(4, 14))
-
         self.chat = tk.Text(
             self, wrap="word", bg=PANEL, fg=TEXT, insertbackground=TEXT,
             relief="flat", padx=18, pady=16, font=("Segoe UI", 10),
@@ -48,12 +42,7 @@ class AssistantView(ttk.Frame):
         self.chat.tag_configure("body", foreground=TEXT)
         self.chat.tag_configure("muted", foreground=MUTED, font=("Segoe UI", 9))
 
-        self._append(
-            "Agente",
-            "Estoy listo. Puedo consultar tus cuentas, registrar ingresos y gastos, crear clientes y adjuntar comprobantes.\n\n"
-            "Prueba: «Carlos me pagó 25 dólares por mensualidad mediante transferencia, voucher 2581».\n"
-            "También puedes escribir «ayuda» para ver más ejemplos.",
-        )
+        self._append("Agente", "¿Qué necesitas consultar o registrar?")
 
         input_area = ttk.Frame(self)
         input_area.pack(fill="x", side="bottom", pady=(14, 0))
@@ -73,7 +62,6 @@ class AssistantView(ttk.Frame):
         self.cancel_button = self._plain_button(self.pending_bar, "Cancelar", self.cancel)
         if not is_voice_engine_available():
             self.voice_button.configure(state="disabled")
-            self._append("Sistema", "El reconocimiento de voz no está configurado en este equipo. Puedes usar el asistente por texto.", "muted")
 
     def set_theme(self, palette):
         """Update the chat surface and message accents when the app theme changes."""

@@ -1,5 +1,5 @@
 #define MyAppName "Gestor Financiero"
-#define MyAppVersion "0.6.0"
+#define MyAppVersion "0.7.0"
 #define MyAppPublisher "Gestor Financiero"
 #define MyAppExeName "GestorFinanciero.exe"
 

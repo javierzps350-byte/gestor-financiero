@@ -6,6 +6,7 @@ se preparan como borrador y requieren confirmación explícita en la interfaz.
 """
 from __future__ import annotations
 
+import calendar
 import re
 import unicodedata
 from datetime import date, timedelta
@@ -52,18 +53,151 @@ def _clean(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip(" \t\r\n,.;:-")
 
 
+MONTH_NUMBERS = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5,
+    "junio": 6, "julio": 7, "agosto": 8, "septiembre": 9,
+    "setiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+}
+CATEGORY_ALIASES = {
+    "Hogar": ("hogar", "casa", "vivienda", "arriendo"),
+    "Comida": ("comida", "comidas", "alimentacion", "alimentos", "supermercado", "mercado"),
+    "Transporte": ("transporte", "gasolina", "combustible", "taxi", "bus", "pasaje"),
+    "Entretenimiento": ("entretenimiento", "ocio", "cine"),
+    "Salud": ("salud", "medicina", "medicinas", "farmacia", "medico", "doctor"),
+    "Educación": ("educacion", "colegio", "universidad", "estudios", "curso"),
+    "Servicios": ("servicios", "agua", "luz", "electricidad", "internet", "telefono"),
+    "Compras": ("compras", "ropa", "articulos"),
+    "Negocio": ("negocio", "empresa", "proveedor", "insumos", "materiales"),
+    "Otros": ("otros", "varios", "miscelaneos"),
+}
+
+
+def _parse_user_date(value: str) -> date | None:
+    value = value.strip()
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        pass
+    from datetime import datetime
+    for pattern in ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(value, pattern).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _extract_date(text: str) -> str | None:
-    match = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", text)
-    if match:
-        # Validar la fecha antes de pasarla a los servicios financieros.
-        return date.fromisoformat(match.group(1)).isoformat()
+    # Resolve ISO, DD/MM/YYYY and common relative/named dates.
+    iso = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", text)
+    if iso:
+        return date.fromisoformat(iso.group(1)).isoformat()
+    numeric = re.search(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{4})\b", text)
+    if numeric:
+        parsed = _parse_user_date(numeric.group(1))
+        if parsed:
+            return parsed.isoformat()
+
     normalized = _plain(text)
     today = date.today()
+    if re.search(r"\b(anteayer|antes de ayer)\b", normalized):
+        return (today - timedelta(days=2)).isoformat()
     if re.search(r"\b(ayer|el dia de ayer)\b", normalized):
         return (today - timedelta(days=1)).isoformat()
-    if re.search(r"\b(hoy|ahora|acabo de)\b", normalized):
+    if re.search(r"\b(manana)\b", normalized):
+        return (today + timedelta(days=1)).isoformat()
+    if re.search(r"\b(hoy|ahora|acabo de|hace un momento)\b", normalized):
         return today.isoformat()
+    month_pattern = "|".join(sorted(MONTH_NUMBERS, key=len, reverse=True))
+    named = re.search(
+        rf"\b(\d{1,2})\s+de\s+({month_pattern})(?:\s+(?:de|del)\s+(\d{4}))?\b",
+        normalized,
+    )
+    if named:
+        day = int(named.group(1))
+        month = MONTH_NUMBERS[named.group(2)]
+        year = int(named.group(3)) if named.group(3) else today.year
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            return None
     return None
+
+
+def _extract_period_range(text: str) -> tuple[str, str] | None:
+    # Resolve common period expressions into inclusive ISO date boundaries.
+    normalized = _plain(text)
+    today = date.today()
+
+    explicit: list[date] = []
+    for match in re.finditer(r"\b\d{4}-\d{2}-\d{2}\b", text):
+        parsed = _parse_user_date(match.group(0))
+        if parsed:
+            explicit.append(parsed)
+    for match in re.finditer(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b", text):
+        parsed = _parse_user_date(match.group(0))
+        if parsed:
+            explicit.append(parsed)
+    if len(explicit) >= 2:
+        first, last = min(explicit), max(explicit)
+        return first.isoformat(), last.isoformat()
+    if len(explicit) == 1 and any(word in normalized for word in ("fecha", "dia", "del", "el")):
+        value = explicit[0].isoformat()
+        return value, value
+
+    recent = re.search(r"\b(ultimos?|ultimas?)\s+(\d{1,3})\s+(dias?|semanas?)\b", normalized)
+    if recent:
+        count = max(1, min(int(recent.group(2)), 3650))
+        days = count * 7 if "semana" in recent.group(3) else count
+        return (today - timedelta(days=days - 1)).isoformat(), today.isoformat()
+
+    if any(term in normalized for term in ("mes pasado", "mes anterior", "el mes anterior")):
+        year = today.year if today.month > 1 else today.year - 1
+        month = today.month - 1 if today.month > 1 else 12
+        last_day = calendar.monthrange(year, month)[1]
+        return date(year, month, 1).isoformat(), date(year, month, last_day).isoformat()
+    if any(term in normalized for term in ("este mes", "mes actual", "durante el mes", "del mes")):
+        return today.replace(day=1).isoformat(), today.isoformat()
+    if any(term in normalized for term in ("ano pasado", "año pasado", "ano anterior", "año anterior")):
+        year = today.year - 1
+        return date(year, 1, 1).isoformat(), date(year, 12, 31).isoformat()
+    if any(term in normalized for term in ("este ano", "este año", "ano actual", "año actual")):
+        return date(today.year, 1, 1).isoformat(), today.isoformat()
+
+    month_pattern = "|".join(sorted(MONTH_NUMBERS, key=len, reverse=True))
+    month_match = re.search(rf"\b({month_pattern})\b", normalized)
+    if month_match:
+        month = MONTH_NUMBERS[month_match.group(1)]
+        year_match = re.search(r"\b(20\d{2})\b", normalized)
+        if year_match:
+            year = int(year_match.group(1))
+        else:
+            year = today.year
+            if month >= today.month and any(word in normalized for word in ("pasado", "anterior")):
+                year -= 1
+        last_day = calendar.monthrange(year, month)[1]
+        if year == today.year and month == today.month:
+            last_day = today.day
+        return date(year, month, 1).isoformat(), date(year, month, last_day).isoformat()
+
+    year_match = re.search(r"\b(20\d{2})\b", normalized)
+    if year_match and any(word in normalized for word in ("ano", "año", "durante", "en", "del", "de")):
+        year = int(year_match.group(1))
+        return date(year, 1, 1).isoformat(), date(year, 12, 31).isoformat()
+    return None
+
+
+def _extract_category(text: str) -> str:
+    normalized = _plain(text)
+    matches = []
+    for category, aliases in CATEGORY_ALIASES.items():
+        hits = [
+            len(_plain(alias)) for alias in aliases
+            if re.search(rf"(?<!\w){re.escape(_plain(alias))}(?!\w)", normalized)
+        ]
+        if hits:
+            matches.append((category, max(hits)))
+    return max(matches, key=lambda item: item[1])[0] if matches else ""
 
 
 def _extract_amount(text: str) -> int | None:
@@ -163,6 +297,8 @@ def _extract_counterparty(text: str, direction: str, client: dict[str, Any] | No
         return str(client["name"])
     patterns = (
         r"(.+?)\s+me\s+pag[oó]",
+        r"(.+?)\s+me\s+(?:transfiri[oó]|deposit[oó]|abon[oó]|consign[oó])",
+        r"(?:me\s+)?(?:transfirieron|depositaron|abonaron|consignaron)\s+(?:de\s+)?(.+?)(?:\s+por\b|\s+de\s+\$|\s+de\s+\d|$)",
         r"(?:recib[ií]|cobr[eé])\s+(?:un pago\s+)?de\s+(.+?)(?:\s+por\b|\s+de\s+\$|\s+de\s+\d|$)",
     ) if direction == "income" else (
         r"(?:pagu[eé]|transfer[ií]|deposit[eé])\s+\$?\s*\d+(?:[.,]\d+)?\s*(?:dólares?)?\s+a\s+(.+?)(?:\s+por\b|\s+mediante\b|\s+con\b|$)",
@@ -227,6 +363,8 @@ class FinancialAgent:
             return self._prepare_client(text)
         if self._is_rate_command(normalized):
             return self._prepare_rate(text)
+        if self._is_query_request(normalized):
+            return self._answer_query(text)
         if self._is_movement_command(normalized):
             return self._prepare_movement(text)
         return self._answer_query(text)
@@ -234,17 +372,11 @@ class FinancialAgent:
     @staticmethod
     def help_text() -> str:
         return (
-            "Puedo navegar por las secciones, consultar ingresos, gastos, clientes, deudas y vouchers. "
-            "También preparo registros de pagos, gastos, clientes y cambios de tarifa, además de adjuntar archivos recientes. "
-            "Ejemplos:\n"
-            "• Carlos me pagó 25 dólares por mensualidad mediante transferencia, voucher 2581.\n"
-            "• Pagué 18 dólares a Empresa Eléctrica por electricidad mediante efectivo.\n"
-            "• Crea un cliente Ana López con mensualidad de 23 dólares desde 2026-01-31.\n"
-            "• Cambia la mensualidad de Carlos a 30 dólares desde 2026-12-01.\n"
-            "• Abre la sección de clientes.\n"
-            "• ¿Cuánto debe Carlos?\n"
-            "• Busca el voucher 2581.\n"
-            "• Adjunta la descarga reciente al voucher 2581."
+            "Puedo consultar ingresos, gastos, balances, clientes, mensualidades, deudas, "
+            "categorías, movimientos y vouchers. Entiendo períodos como este mes, el mes "
+            "pasado, un mes por nombre, un año o un rango de fechas. También puedo preparar "
+            "registros, crear clientes, cambiar tarifas y asociar evidencias. Toda escritura "
+            "se presenta para revisión y requiere confirmación."
         )
 
     @staticmethod
@@ -326,18 +458,35 @@ class FinancialAgent:
         return ("cliente" in text and any(word in text for word in ("crea", "crear", "agrega", "agregar", "registra", "registrar", "nuevo")))
 
     @staticmethod
+    def _is_query_request(text: str) -> bool:
+        """Prevent questions about past payments from being treated as new entries."""
+        return bool(re.match(
+            r"^(?:cuant[oa]s?|cual(?:es)?|que|quien(?:es)?|como|cuando|donde|"
+            r"muestrame|mostrar|lista|listado|busca|buscar|encuentra|"
+            r"dime|consulta|consultar|quiero saber|necesito saber|"
+            r"puedes decirme|me puedes decir)", text
+        ))
+
+    @staticmethod
     def _is_movement_command(text: str) -> bool:
         phrases = (
-            "me pago", "recibi", "cobre", "me depositaron", "registra un ingreso",
-            "registrar ingreso", "registra un pago", "anota un pago", "anota el pago",
-            "pague", "gaste", "compre", "registra un gasto", "registrar gasto",
-            "anota un gasto", "hice una transferencia", "registre un gasto",
+            "me pago", "me pagaron", "me deposito", "me depositaron",
+            "me transfirio", "me transfirieron", "me abono", "me abonaron",
+            "me consigno", "me consignaron", "recibi", "recibi un pago",
+            "recibi una transferencia", "cobre", "cobro recibido",
+            "registra un ingreso", "registrar ingreso", "anota un ingreso",
+            "registra un cobro", "registrar un cobro", "anota un pago",
+            "anota el pago", "pague a", "he pagado", "le pague",
+            "pague", "gaste", "compre", "hice una transferencia",
+            "realice una transferencia", "registra un gasto", "registrar gasto",
+            "anota un gasto", "registra un egreso", "registrar egreso",
+            "registre un gasto", "ingreso de dinero", "salida de dinero",
         )
         return any(phrase in text for phrase in phrases)
 
     def _prepare_movement(self, text: str) -> str:
         normalized = _plain(text)
-        expense_markers = ("pague", "gaste", "compre", "registra un gasto", "registrar gasto", "anota un gasto", "hice una transferencia")
+        expense_markers = ("pague", "pague a", "le pague", "he pagado", "gaste", "compre", "registra un gasto", "registrar gasto", "anota un gasto", "hice una transferencia")
         direction = "expense" if any(marker in normalized for marker in expense_markers) else "income"
         client, matches = _find_client_in_text(text)
         if len(matches) > 1:
@@ -354,6 +503,7 @@ class FinancialAgent:
             "voucher_number": _extract_voucher(text),
             "client_id": int(client["id"]) if client and direction == "income" else None,
             "apply_to_monthly": bool(client and direction == "income" and re.search(r"\b(mensualidad|mensual|cuota)\b", normalized)),
+            "category": _extract_category(text) or ("Ingresos" if direction == "income" else "Otros"),
             "notes": "",
         }
         self.pending = {"kind": "movement", "payload": payload}
@@ -640,79 +790,212 @@ class FinancialAgent:
         self.awaiting_choice = None
         return "Operación cancelada. No se modificaron los registros."
 
+    @staticmethod
+    def _period_label(period: tuple[str, str] | None) -> str:
+        if not period:
+            return "todo el historial"
+        start, end = period
+        if start == end:
+            return f"el {start}"
+        start_date = date.fromisoformat(start)
+        end_date = date.fromisoformat(end)
+        names = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+        if start_date.month == end_date.month and start_date.year == end_date.year:
+            return f"{names[start_date.month - 1]} de {start_date.year}"
+        if start_date.year == end_date.year and start_date.month == 1 and end_date.month == 12:
+            return f"el año {start_date.year}"
+        return f"desde {start} hasta {end}"
+
+    @staticmethod
+    def _format_movement_rows(rows: list[dict[str, Any]], limit: int = 12) -> str:
+        lines = []
+        for row in rows[:limit]:
+            amount = format_money(int(row["amount_cents"]))
+            if row.get("direction") == "expense":
+                amount = f"-{amount}"
+            fields = [
+                f"#{row['id']}", row["payment_date"], str(row["counterparty"]),
+                str(row.get("reason") or "Sin motivo"), amount,
+            ]
+            if row.get("payment_method"):
+                fields.append(str(row["payment_method"]))
+            if row.get("voucher_number"):
+                fields.append(f"Voucher {row['voucher_number']}")
+            if row.get("category"):
+                fields.append(str(row["category"]))
+            lines.append(" · ".join(fields))
+        if len(rows) > limit:
+            lines.append(f"Se muestran {limit} de {len(rows)} movimientos.")
+        return "\n".join(lines)
+
     def _answer_query(self, text: str) -> str:
         normalized = _plain(text)
-        if "ingreso" in normalized and any(word in normalized for word in ("mes", "mensual", "este mes")):
-            summary = dashboard_summary()
-            return f"Los ingresos registrados este mes son {format_money(summary['income_month_cents'])}."
-        if "gasto" in normalized and any(word in normalized for word in ("mes", "mensual", "este mes")):
-            summary = dashboard_summary()
-            return f"Los gastos registrados este mes son {format_money(summary['expenses_month_cents'])}."
-        if "balance" in normalized or "saldo del mes" in normalized or "neto del mes" in normalized:
-            summary = dashboard_summary()
-            return (
-                f"Este mes: ingresos {format_money(summary['income_month_cents'])}; "
-                f"gastos {format_money(summary['expenses_month_cents'])}; "
-                f"diferencia {format_money(summary['net_month_cents'])}."
-            )
-        if "voucher" in normalized or "comprobante" in normalized:
-            voucher = _extract_voucher(text)
-            if not voucher:
-                return "Indica el número del voucher que debo buscar."
-            rows = find_voucher_matches(voucher)
-            if not rows:
-                return f"No encontré movimientos con el voucher {voucher}."
-            return "Coincidencias:\n" + "\n".join(
-                f"#{row['id']} · {row['payment_date']} · {row['counterparty']} · {format_money(row['amount_cents'])} · {row['reason']}"
-                for row in rows[:10]
-            )
-        if any(phrase in normalized for phrase in ("quien me debe", "quienes me deben", "clientes morosos", "clientes con deuda", "quien tiene deuda")):
+        period = _extract_period_range(text)
+        date_from, date_to = period if period else ("", "")
+        period_label = self._period_label(period)
+
+        if normalized in {"hola", "buenos dias", "buenas tardes", "buenas noches", "buenas"}:
+            return "Hola. ¿Qué información financiera necesitas revisar?"
+
+        client, matches = _find_client_in_text(text)
+        if len(matches) > 1:
+            return "Encontré varios clientes posibles: " + ", ".join(str(row["name"]) for row in matches) + ". Indica el nombre completo."
+
+        debt_global_terms = (
+            "quien me debe", "quienes me deben", "clientes morosos",
+            "clientes con deuda", "quien tiene deuda", "quienes tienen deuda",
+            "pagos atrasados", "mensualidades vencidas", "deudas vencidas",
+        )
+        debt_terms = ("deuda", "debe", "deberia", "pendiente", "estado de cuenta", "moroso", "mensualidad vencida")
+        if any(term in normalized for term in debt_global_terms):
             debtors = []
             for item in list_clients(active_only=True):
-                summary = client_debt_summary(int(item["id"]))
-                if summary["overdue_cents"] > 0:
+                summary = client_debt_summary(int(item["id"]), date_to or None)
+                if summary["pending_cents"] > 0:
                     debtors.append((item["name"], summary["overdue_cents"], summary["pending_cents"]))
             if not debtors:
-                return "No hay clientes con mensualidades vencidas."
-            debtors.sort(key=lambda row: row[1], reverse=True)
-            return "Clientes con deuda vencida:\n" + "\n".join(
+                return "No hay clientes con cuotas pendientes en el período consultado."
+            debtors.sort(key=lambda row: (row[1], row[2]), reverse=True)
+            return "Clientes con saldos pendientes:\n" + "\n".join(
                 f"{name} · Vencido {format_money(overdue)} · Pendiente total {format_money(pending)}"
                 for name, overdue, pending in debtors[:50]
             )
-        if any(word in normalized for word in ("deuda", "debe", "deberia", "estado de cuenta")):
-            client, matches = _find_client_in_text(text)
-            if len(matches) > 1:
-                return "Hay varios clientes posibles: " + ", ".join(str(row['name']) for row in matches)
+
+        if any(term in normalized for term in debt_terms):
             if not client:
-                return "No identifiqué al cliente. Escribe su nombre como aparece en el registro."
-            summary = client_debt_summary(int(client["id"]))
+                return "¿De qué cliente necesitas el estado de cuenta? Escribe su nombre."
+            summary = client_debt_summary(int(client["id"]), date_to or None)
             return (
-                f"Estado de cuenta de {client['name']}:\n"
+                f"Estado de cuenta de {client['name']} (al {date_to or date.today().isoformat()}):\n"
                 f"Total recibido: {format_money(summary['total_received_cents'])}\n"
+                f"Total facturado: {format_money(summary['total_billed_cents'])}\n"
                 f"Deuda vencida: {format_money(summary['overdue_cents'])}\n"
-                f"Pendiente total de cuotas generadas: {format_money(summary['pending_cents'])}\n"
+                f"Pendiente total: {format_money(summary['pending_cents'])}\n"
                 f"Mensualidades cubiertas: {summary['fully_paid_months']}\n"
                 f"Mensualidades con abono parcial: {summary['partial_months']}\n"
-                f"Abonos aplicados a períodos futuros: {format_money(summary['future_applied_cents'])}."
+                f"Abonos a períodos futuros: {format_money(summary['future_applied_cents'])}."
             )
-        if any(phrase in normalized for phrase in ("lista de clientes", "mostrar clientes", "clientes registrados", "cuantos clientes", "cuántos clientes")):
+
+        if any(word in normalized for word in ("voucher", "comprobante", "referencia")):
+            voucher = _extract_voucher(text)
+            if not voucher:
+                return "Indica el número del voucher o comprobante que debo buscar."
+            rows = find_voucher_matches(voucher)
+            if period:
+                rows = [row for row in rows if date_from <= row["payment_date"] <= date_to]
+            if not rows:
+                return f"No encontré movimientos con el voucher {voucher} durante {period_label}."
+            return "Coincidencias de voucher:\n" + self._format_movement_rows(rows, 12)
+
+        if any(phrase in normalized for phrase in (
+            "lista de clientes", "mostrar clientes", "clientes registrados",
+            "cuantos clientes", "cuantas personas", "mis clientes",
+        )):
             clients = list_clients(active_only=True)
             if not clients:
                 return "Todavía no hay clientes activos registrados."
-            return "Clientes activos:\n" + "\n".join(
-                f"{row['name']} · Mensualidad {format_money(row['current_rate_cents'])}"
-                for row in clients[:50]
+            lines = [f"{row['name']} · Mensualidad {format_money(row['current_rate_cents'])}" for row in clients[:50]]
+            return f"Hay {len(clients)} clientes activos.\n" + "\n".join(lines)
+
+        category = _extract_category(text)
+        income_terms = (
+            "ingreso", "ingresos", "recibi", "recibido", "recibieron", "cobro", "cobros",
+            "cobre", "cobrado", "me pagaron", "me pago", "me ha pagado", "ha pagado",
+            "pagos recibidos", "me depositaron", "me transfirieron", "abonaron", "entradas",
+        )
+        expense_terms = (
+            "gasto", "gastos", "egreso", "egresos", "pague", "pague a", "le pague",
+            "he pagado", "yo he pagado", "gaste", "compre", "salida", "salidas",
+            "transferi", "pagos que hice",
+        )
+        wants_income = any(term in normalized for term in income_terms)
+        wants_expense = any(term in normalized for term in expense_terms)
+        if client and not wants_expense and any(term in normalized for term in ("pago", "pagos", "pagado", "ha pagado", "abono", "abonos", "historial")):
+            wants_income = True
+        direction = "income" if wants_income and not wants_expense else "expense" if wants_expense and not wants_income else "all"
+
+        method = _extract_method(text)
+        wants_balance = any(term in normalized for term in ("balance", "saldo general", "saldo total", "diferencia", "resumen financiero"))
+        wants_listing = any(term in normalized for term in (
+            "muestrame", "mostrar", "lista", "listado", "detalle", "detalles",
+            "cuales", "que movimientos", "que pagos", "que ingresos", "que gastos",
+            "historial", "ultimos movimientos",
+        ))
+        wants_count = any(term in normalized for term in ("cuantos", "cuantas", "cantidad de", "numero de movimientos"))
+        wants_total = any(term in normalized for term in (
+            "cuanto", "cuanta", "total", "suma", "cuanto he", "cuanto recibi",
+            "cuanto gaste", "cuanto pague", "cuanto cobre",
+        ))
+        client_query = bool(client and any(term in normalized for term in (
+            "movimiento", "movimientos", "pago", "pagos", "ingreso", "ingresos",
+            "gasto", "gastos", "historial", "recibio", "pagado", "ha pagado",
+            "pague", "le pague", "he pagado",
+        )))
+
+        if wants_balance or (wants_income and wants_expense):
+            rows = search_movements(date_from=date_from, date_to=date_to, limit=250000)
+            if client:
+                rows = [row for row in rows if row.get("client_id") == int(client["id"])]
+            income_total = sum(int(row["amount_cents"]) for row in rows if row["direction"] == "income")
+            expense_total = sum(int(row["amount_cents"]) for row in rows if row["direction"] == "expense")
+            return (
+                f"Resumen financiero de {period_label}:\n"
+                f"Ingresos: {format_money(income_total)}\n"
+                f"Gastos: {format_money(expense_total)}\n"
+                f"Balance neto: {format_money(income_total - expense_total)}\n"
+                f"Movimientos: {len(rows)}."
             )
-        if any(word in normalized for word in ("busca", "buscar", "encuentra", "movimiento")):
-            query = re.sub(r"\b(busca|buscar|encuentra|movimiento|movimientos|el|la|los|las)\b", " ", text, flags=re.IGNORECASE)
-            query = _clean(query)
-            if not query:
-                return "Escribe el nombre, concepto o dato que debo buscar."
-            rows = search_movements(query=query, limit=20)
+
+        if direction != "all" or category or client_query or period or "ultimos movimientos" in normalized:
+            rows = search_movements(
+                direction=direction,
+                date_from=date_from,
+                date_to=date_to,
+                query=str(client["name"]) if client and direction == "expense" and client_query else "",
+                client_id=int(client["id"]) if client and client_query and direction != "expense" else None,
+                category=category,
+                limit=250000 if wants_total or wants_count else 100,
+            )
+            if method:
+                rows = [
+                    row for row in rows
+                    if _plain(str(row.get("payment_method") or "")) == _plain(method)
+                ]
             if not rows:
-                return "No encontré movimientos que coincidan con esa búsqueda."
-            return "Movimientos encontrados:\n" + "\n".join(
-                f"#{row['id']} · {row['payment_date']} · {row['counterparty']} · {format_money(row['amount_cents'])} · {row['reason']}"
-                for row in rows[:10]
+                qualifier = f" para {client['name']}" if client else ""
+                category_text = f" en la categoría {category}" if category else ""
+                return f"No encontré movimientos{qualifier}{category_text} durante {period_label}."
+            total = sum(int(row["amount_cents"]) for row in rows)
+            label = "ingresos" if direction == "income" else "gastos" if direction == "expense" else "movimientos"
+            if wants_count:
+                return f"Encontré {len(rows)} {label} durante {period_label}, por un total de {format_money(total)}."
+            if wants_listing or (client_query and not wants_total):
+                name = client["name"] if client else "la búsqueda"
+                return (
+                    f"{len(rows)} {label} de {name} durante {period_label}. "
+                    f"Total: {format_money(total)}.\n" + self._format_movement_rows(rows, 15)
+                )
+            suffix = f" de {client['name']}" if client else ""
+            category_suffix = f" en {category}" if category else ""
+            return f"Total de {label}{suffix}{category_suffix} durante {period_label}: {format_money(total)} en {len(rows)} movimiento(s)."
+
+        if any(word in normalized for word in ("busca", "buscar", "encuentra", "localiza", "movimiento", "movimientos")):
+            query = re.sub(
+                r"\b(busca|buscar|encuentra|localiza|muestrame|mostrar|el|la|los|las|por favor|movimiento|movimientos)\b",
+                " ", text, flags=re.IGNORECASE,
             )
-        return "No reconocí esa instrucción. Escribe «ayuda» para ver ejemplos de lo que puedo hacer."
+            query = str(client["name"]) if client else _clean(query)
+            rows = search_movements(query=query, date_from=date_from, date_to=date_to, limit=100)
+            if not rows:
+                return f"No encontré movimientos que coincidan con «{_clean(query)}»."
+            return "Movimientos encontrados:\n" + self._format_movement_rows(rows, 15)
+
+        if client:
+            return f"Encontré al cliente {client['name']}. Puedes preguntarme por su deuda, pagos, historial o mensualidad."
+        if period:
+            return f"Entendí el período {period_label}. Indícame si quieres consultar ingresos, gastos, balance o movimientos."
+        return (
+            "No terminé de identificar qué necesitas. Puedes preguntarme por ingresos, "
+            "gastos, balance, clientes, deudas, categorías, movimientos o vouchers; "
+            "también puedes indicar un mes, año o rango de fechas."
+        )
